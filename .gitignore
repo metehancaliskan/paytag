@@ -1,0 +1,55 @@
+# ==========================================================================
+# BU REPO TESLİMDE PUBLIC OLACAK. Sır içeren hiçbir şey buraya girmemeli.
+# Git geçmişi geri alınamaz: bir kez commit edilen sır sonsuza kadar kalır.
+# ==========================================================================
+
+# --- Sırlar ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets/
+verifier-key*
+verifier-secret*
+*-secret.json
+*-seed.txt
+
+# --- Stellar CLI: identity dosyaları seed phrase içerir -------------------
+.stellar/
+.soroban/
+.config/stellar/
+
+# --- Rust / Soroban ------------------------------------------------------
+contracts/target/
+**/*.wasm
+
+# --- Node / Next.js ------------------------------------------------------
+node_modules/
+web/.next/
+web/out/
+web/.vercel/
+*.tsbuildinfo
+.turbo/
+
+# --- Test / build artifacts ----------------------------------------------
+playwright-report/
+test-results/
+coverage/
+
+# --- OS / editor ---------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Yerel geçici ---------------------------------------------------------
+_to_delete/
+
+# sır tarayıcı test artifact
+.scan-test-tmp/

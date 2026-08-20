@@ -1,0 +1,41 @@
+# gitleaks yapılandırması — CI'da TÜM GEÇMİŞİ tarar.
+# scan-secrets.sh sırrın geçmişe girmesini engeller; gitleaks kaçan olmuş mu diye
+# geriye dönük bakar. İkisi birlikte katmanlı savunma oluşturur.
+title = "Paytag"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "stellar-secret-seed"
+description = "Stellar secret seed (S... 56 karakter)"
+regex = '''\bS[A-Z2-7]{55}\b'''
+keywords = ["S"]
+
+[[rules]]
+id = "next-public-secret"
+description = "NEXT_PUBLIC_ öneki ile tanımlanmış sır — client bundle'ına girer"
+regex = '''NEXT_PUBLIC_[A-Z0-9_]*(SECRET|PRIVATE|VERIFIER_SEED|SEED|PASSWORD)'''
+keywords = ["NEXT_PUBLIC_"]
+
+[allowlist]
+description = "Public tanımlayıcılar ve şablonlar sır değildir"
+paths = [
+  '''\.env\.example$''',
+  '''scripts/scan-secrets\.sh$''',
+  # test-scan-secrets.sh'in TAMAMI kasten sahte sır içerir (8 engelleme vakası).
+  # scan-secrets.sh bu dosyayı zaten is_excluded() ile atlıyordu; gitleaks
+  # tarafında unutulmuştu ve CI'ı 4 yanlış alarmla kırıyordu.
+  # Bilinçli ödünleşim: bu dosyaya kazara yapıştırılan GERÇEK bir sır iki
+  # tarayıcıdan da kaçar. Dosyanın içine asla gerçek değer yazılmamalı —
+  # sahte Stellar seed'i bu yüzden /dev/urandom'dan üretiliyor.
+  '''scripts/test-scan-secrets\.sh$''',
+  '''\.githooks/''',
+  '''\.gitleaks\.toml$''',
+  '''docs/SECURITY\.md$''',
+]
+regexes = [
+  '''\bG[A-Z2-7]{55}\b''',   # Stellar public key — paylaşılması normal
+  '''\bC[A-Z2-7]{55}\b''',   # Soroban contract id — paylaşılması normal
+  '''\bM[A-Z2-7]{68}\b''',   # muxed account — paylaşılması normal
+]
