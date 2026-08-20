@@ -4,14 +4,25 @@
 //! Tasarım kararları ve saldırı analizi için: docs/SPEC.md
 //!
 //! Faz 2.1: tipler, storage, init, set_verifier.
-//! deposit / claim / refund sonraki adımlarda eklenecek.
+//! Faz 2.2: deposit.
+//! claim / refund sonraki adımlarda eklenecek.
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, BytesN, Env};
+use soroban_sdk::{
+    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, BytesN, Env,
+};
 
 // Instance storage TTL'i: her yazma işleminde uzatılır.
 // ~5 sn/ledger → 30 gün ≈ 518_400 ledger.
 const INSTANCE_TTL_THRESHOLD: u32 = 172_800; // ~10 gün kaldıysa
 const INSTANCE_TTL_EXTEND: u32 = 518_400; // ~30 güne tamamla
+
+// Ödeme kayıtları `persistent` storage'da ve İÇLERİNDE PARA VAR.
+// Kayıt arşivlenirse fona erişilemez, dolayısıyla TTL her zaman
+// expiry_ledger'dan uzun olmalı. MAX_EXPIRY_LEDGERS bunu garanti eder:
+// kabul edilen en uzak expiry bile TTL penceresinin içinde kalır.
+const PAYMENT_TTL_THRESHOLD: u32 = 518_400; // ~30 gün kaldıysa
+const PAYMENT_TTL_EXTEND: u32 = 1_036_800; // ~60 güne tamamla
+const MAX_EXPIRY_LEDGERS: u32 = 518_400; // deposit anından en fazla ~30 gün
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -21,6 +32,14 @@ pub enum Error {
     AlreadyInitialized = 1,
     /// Kontrat henüz init edilmemiş.
     NotInitialized = 2,
+    /// Tutar sıfır veya negatif.
+    InvalidAmount = 3,
+    /// expiry_ledger şimdiki ledger'dan geride veya ona eşit.
+    ExpiryInPast = 4,
+    /// expiry_ledger, storage TTL penceresinin ötesinde.
+    ExpiryTooFar = 5,
+    /// Böyle bir ödeme kaydı yok.
+    PaymentNotFound = 6,
 }
 
 /// Bir ödemenin yaşam döngüsü. Geçişler tek yönlüdür:
@@ -67,6 +86,21 @@ pub enum DataKey {
     Payment(u64),
     /// temporary — replay koruması, imza ömründen uzun TTL ile
     Nonce(BytesN<32>),
+}
+
+/// Emanet yatırıldı.
+///
+/// `identity` topic olarak yayılır: indexer bir kimliğe ait tüm ödemeleri
+/// tek filtreyle toplayabilsin. Faz 4'teki "bekleyen bakiye" ekranı bunu okur.
+#[contractevent(topics = ["deposit"])]
+pub struct DepositEvent {
+    #[topic]
+    pub identity: BytesN<32>,
+    pub payment_id: u64,
+    pub from: Address,
+    pub token: Address,
+    pub amount: i128,
+    pub expiry_ledger: u32,
 }
 
 #[contract]
@@ -119,6 +153,81 @@ impl PaytagEscrow {
     pub fn get_config(env: Env) -> Result<Config, Error> {
         Self::load_config(&env)
     }
+
+    /// Bir internet kimliğine etiketli emanet yatırır.
+    ///
+    /// Para alıcının cüzdanına DEĞİL, kontrata geçer ve `identity` etiketiyle
+    /// bekler. Alıcının bu sırada bir cüzdanı olması, hatta Paytag'den haberi
+    /// olması gerekmez — ürünün ana vaadi budur (SPEC.md §2).
+    ///
+    /// Dönen `u64`, ödemenin kimliğidir; claim ve refund bununla yapılır.
+    pub fn deposit(
+        env: Env,
+        from: Address,
+        identity: BytesN<32>,
+        token: Address,
+        amount: i128,
+        expiry_ledger: u32,
+    ) -> Result<u64, Error> {
+        // Kontrat kurulmadan para kabul etmeyiz: verifier anahtarı
+        // belirlenmemişken yatırılan para hiçbir zaman claim edilemezdi.
+        Self::load_config(&env)?;
+
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let now = env.ledger().sequence();
+        if expiry_ledger <= now {
+            // Zaten dolmuş bir emanet, anında refund edilebilir olurdu —
+            // alıcıya hiç şans tanımayan anlamsız bir kayıt.
+            return Err(Error::ExpiryInPast);
+        }
+        if expiry_ledger > now + MAX_EXPIRY_LEDGERS {
+            // Kaydın TTL'i expiry'den kısa kalırsa para erişilemez hale gelir.
+            return Err(Error::ExpiryTooFar);
+        }
+
+        from.require_auth();
+
+        // Parayı gönderenden kontrata çek. Auth yoksa burada panikler.
+        let escrow = env.current_contract_address();
+        token::Client::new(&env, &token).transfer(&from, &escrow, &amount);
+
+        let id = Self::next_payment_id(&env);
+        let payment = PaymentData {
+            from: from.clone(),
+            identity: identity.clone(),
+            token: token.clone(),
+            amount,
+            expiry_ledger,
+            status: Status::Pending,
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::Payment(id), &payment);
+        Self::bump_payment(&env, id);
+        Self::bump_instance(&env);
+
+        DepositEvent {
+            identity,
+            payment_id: id,
+            from,
+            token,
+            amount,
+            expiry_ledger,
+        }
+        .publish(&env);
+
+        Ok(id)
+    }
+
+    pub fn get_payment(env: Env, id: u64) -> Result<PaymentData, Error> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Payment(id))
+            .ok_or(Error::PaymentNotFound)
+    }
 }
 
 // Kontrat arayüzüne çıkmayan yardımcılar.
@@ -135,7 +244,29 @@ impl PaytagEscrow {
             .instance()
             .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND);
     }
+
+    fn bump_payment(env: &Env, id: u64) {
+        env.storage().persistent().extend_ttl(
+            &DataKey::Payment(id),
+            PAYMENT_TTL_THRESHOLD,
+            PAYMENT_TTL_EXTEND,
+        );
+    }
+
+    /// Monoton artan ödeme id'si. 1'den başlar; 0 "yok" anlamına ayrılmıştır.
+    fn next_payment_id(env: &Env) -> u64 {
+        let id: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PaymentCounter)
+            .unwrap_or(0)
+            + 1;
+        env.storage().instance().set(&DataKey::PaymentCounter, &id);
+        id
+    }
 }
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_deposit;
