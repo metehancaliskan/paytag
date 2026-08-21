@@ -33,6 +33,18 @@ paths = [
   '''\.githooks/''',
   '''\.gitleaks\.toml$''',
   '''docs/SECURITY\.md$''',
+  # SPEC.md, Rust ve TypeScript implementasyonlarının aynı sonucu ürettiğini
+  # kanıtlayan test vektörlerini İÇERMEK ZORUNDA (§2.3, §4.2). Bunlar
+  # `identity_key = <64 hane hex>` biçiminde olduğu için gitleaks'in
+  # generic-api-key kuralına takılıyor — desen doğru, yorum yanlış.
+  #
+  # Bu değerler tanım gereği sır olamaz: hepsi herkese açık girdilerin
+  # sha256'sı, ör. sha256(0x00 ‖ "torvalds"). Dünyada herkes yeniden
+  # hesaplayabilir.
+  #
+  # Koruma tamamen kalkmıyor: scan-secrets.sh bu dosyayı is_excluded()
+  # ile ATLAMIYOR, yani kendi tarayıcımız SPEC.md'yi taramaya devam ediyor.
+  '''docs/SPEC\.md$''',
 ]
 regexes = [
   '''\bG[A-Z2-7]{55}\b''',   # Stellar public key — paylaşılması normal

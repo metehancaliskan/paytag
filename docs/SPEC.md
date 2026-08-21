@@ -14,7 +14,7 @@ Faz 2 (kontrat) ve Faz 3 (verifier) bu belgeye göre yazılır; uyuşmazlık
 |---|---|---|
 | Kimlik türü | **Yalnızca GitHub kullanıcı** | Tek doğrulama yolu (OAuth `login` eşleşmesi). Kalan süre kontratın negatif testlerine ve UI'a gider. Diğer türler mimaride yer tutar. |
 | Etiketleme | **Handle tabanlı**, `sha256(kind ‖ handle)` | Etiket tamamen offline hesaplanır; alıcı hiç kayıt olmamışken bile ödeme yapılabilir. Bu ürünün ana vaadi. |
-| Alıcı adresi | Yalnızca klasik hesap (`G...`) | Cüzdanlar `G...` verir. Kontrat adresine (`C...`) claim Faz 2 sonrası. |
+| Alıcı adresi | 56 karakterlik strkey (`G...` veya `C...`) | Cüzdanlar `G...` verir; kontrat adresi (`C...`) de aynı uzunlukta olduğu için ek iş gerektirmeden desteklenir. Muxed (`M...`, 69 karakter) reddedilir. |
 | Token | SEP-41 arayüzü, testnet'te kendi USDC SAC'ımız | Mainnet USDC'ye geçiş tek adres değişikliği. |
 
 `kind` byte'ı MVP'de tek değer alsa da protokole **şimdi** giriyor; sonradan
@@ -193,17 +193,34 @@ doğrular ve **bir yetki belgesi** imzalar. Kontrat imzayı
 
 ### 4.1 İmzalanan veri (preimage)
 
-Sabit uzunlukta, **147 byte**. Uzunluk sabit olduğu için ayırıcıya gerek
+Sabit uzunlukta, **195 byte**. Uzunluk sabit olduğu için ayırıcıya gerek
 yok; alan sınırları belirsizliğe yer bırakmaz.
 
 | Ofset | Uzunluk | Alan | Kodlama |
 |---|---|---|---|
 | 0 | 15 | domain ayırıcı | ASCII `paytag.claim.v1` |
-| 15 | 32 | `contract_id` | ham (strkey çözülmüş) |
-| 47 | 32 | `identity_key` | ham |
-| 79 | 32 | `recipient` | ham ed25519 public key (`G...` çözülmüş) |
-| 111 | 4 | `expires_at` | big-endian `u32` (ledger sırası) |
-| 115 | 32 | `nonce` | ham, rastgele |
+| 15 | 56 | `contract_id` | strkey ASCII (`C...`) |
+| 71 | 32 | `identity_key` | ham |
+| 103 | 56 | `recipient` | strkey ASCII (`G...` veya `C...`) |
+| 159 | 4 | `expires_at` | big-endian `u32` (ledger sırası) |
+| 163 | 32 | `nonce` | ham, rastgele |
+
+> **Adresler neden ham anahtar değil strkey?**
+>
+> İlk taslakta adresler 32 baytlık ham anahtar olarak gömülüyordu. Uygulama
+> sırasında iki sorun çıktı:
+>
+> 1. `soroban-sdk` 26'da ham anahtarı çıkaran `Address::to_payload()`
+>    `hazmat-address` özelliği arkasında ve dokümanı **"bunu ed25519 imza
+>    doğrulamasında kimlik doğrulama amacıyla kullanmayın"** diye açıkça
+>    uyarıyor (hesabın master key'i o hesabın imzacısı olmayabilir).
+> 2. Ham bayta inmek adres türüne bağımlılık yaratıyor; yeni bir adres türü
+>    çıktığında protokol kırılır.
+>
+> Strkey her iki sorunu da çözüyor: kanonik, adres türünden bağımsız, ve
+> TypeScript tarafında `address.toString()` ile birebir üretilebiliyor —
+> yani Faz 3'teki Rust/TS parity riskini de azaltıyor. Uzunluk kontrolü
+> (56 bayt) muxed adresleri baştan eliyor.
 
 ```
 sig = Ed25519-Sign(verifier_secret_key, preimage)
@@ -219,29 +236,35 @@ Faz 2 ve Faz 3 testleri bu örneği kullanır.
 
 ```
 contract_id  = CBJXVQGY24W2AXZ7XDY3BVGDADJRQ7PGEVL6SV2VMRYZMN64B5GLUUTU
-             = 537ac0d8d72da05f3fb8f1b0d4c300d3187de62557e9575564719637dc0f4cba
 identity_key = 9d8638cdf5594ee5a5178e3d413fb8206513356b947de1de600f178532c7060b   ("torvalds")
 recipient    = GAD3LMKOEUQ4PVF42NGCDVYZVMLZDAP4RNRRNWEZ7Y7CCXHB7MNQCKWG
-             = 07b5b14e2521c7d4bcd34c21d719ab179181fc8b6316d899fe3e215ce1fb1b01
 expires_at   = 1000000  -> 000f4240
 nonce        = 0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20
 ```
 
-preimage (147 byte):
+preimage (195 byte):
 
 ```
-7061797461672e636c61696d2e7631537ac0d8d72da05f3fb8f1b0d4c300d318
-7de62557e9575564719637dc0f4cba9d8638cdf5594ee5a5178e3d413fb82065
-13356b947de1de600f178532c7060b07b5b14e2521c7d4bcd34c21d719ab1791
-81fc8b6316d899fe3e215ce1fb1b01000f42400102030405060708090a0b0c0d
-0e0f101112131415161718191a1b1c1d1e1f20
+7061797461672e636c61696d2e763143424a58565147593234573241585a3758
+4459334256474441444a525137504745564c36535632564d52595a4d4e363442
+35474c555554559d8638cdf5594ee5a5178e3d413fb8206513356b947de1de60
+0f178532c7060b474144334c4d4b4f4555513450564634324e47434456595a56
+4d4c5a44415034524e52524e57455a3759374343584842374d4e51434b574700
+0f42400102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d
+1e1f20
 ```
 
 Sağlama (imza değil, yalnızca preimage'ın doğru kurulduğunu test etmek için):
 
 ```
-sha256(preimage) = e50b1384fcf1dcfc2e8c83cd89db629b5c5e5d33491fe6a36b04b40f53356e8b
+sha256(preimage) = 6797bc5d95d35ac19c7918c38bf139fffaea466406439b08b49e017c08780906
 ```
+
+Bu değer kontratta bir test tarafından doğrulanıyor:
+`test_claim::preimage_spec_altin_vektorune_uyuyor`. Kontrat SPEC'teki
+adreste kaydedilip kendi `claim_preimage` fonksiyonu çağrılıyor ve
+sonucun sha256'sı yukarıdaki sabitle karşılaştırılıyor. Faz 3'te
+TypeScript verifier'ı aynı sağlamayı üretmek zorunda — parity çıpası budur.
 
 ### 4.3 Her alan hangi saldırıyı kapatıyor
 
@@ -333,11 +356,10 @@ yalnızca explorer linklerine değil, ekran görüntülerine ve komut
 
 ## 7. Faz 2'ye devredilen açık sorular
 
-1. **`recipient` alanının kontrat içinde ham 32 byte'a çevrilmesi.**
-   Kontrat `recipient: Address` alıyor ama preimage ham ed25519 key
-   istiyor. Dönüşümün `soroban-sdk` 26'daki en temiz yolu Faz 2.1'de
-   netleşecek; `C...` adresli bir alıcının reddedildiğini gösteren bir
-   test yazılacak.
+1. ~~**`recipient` alanının kontrat içinde ham 32 byte'a çevrilmesi.**~~
+   **ÇÖZÜLDÜ (Faz 2.3):** Ham anahtar yerine strkey kullanılıyor; §4.1'deki
+   nota bakın. `C...` adresli alıcı da destekleniyor, muxed (`M...`)
+   `UnsupportedAddress` ile reddediliyor.
 2. **Varsayılan expiry kaç ledger?** Testnet'te ~5 sn/ledger. 30 gün
    ≈ 518.400 ledger. Değer `init`'te ayarlanabilir; UI'da gönderene
    sunulacak varsayılan Faz 4'te kesinleşir.
