@@ -15,3 +15,4 @@ soroban-sdk = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 # Yalnızca test: verifier imzalarını üretmek için. Kontrat wasm'ına girmez.
 ed25519-dalek = "2"
+proptest = "1"

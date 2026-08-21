@@ -7,6 +7,11 @@
 //! Faz 2.2: deposit.
 //! Faz 2.3: claim (ed25519 verifier imzası + nonce replay koruması).
 //! Faz 2.4: refund.
+//! Faz 2.6: solvency invariantı (test_fuzz).
+
+// proptest ve ed25519-dalek std ister; kontrat wasm'ı hâlâ no_std.
+#[cfg(test)]
+extern crate std;
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Bytes,
@@ -516,5 +521,7 @@ mod test;
 mod test_claim;
 #[cfg(test)]
 mod test_deposit;
+#[cfg(test)]
+mod test_fuzz;
 #[cfg(test)]
 mod test_refund;
