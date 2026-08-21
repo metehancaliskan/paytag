@@ -19,7 +19,7 @@
 // çıktısında ve kabuk geçmişinde görünür; ortam değişkeni görünmez.
 
 import { createHash, sign as edSign, createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -174,13 +174,34 @@ function cmdKeygen() {
 
   mkdirSync(dirname(target), { recursive: true });
   let mevcut = existsSync(target) ? readFileSync(target, 'utf8') : '';
-  if (/^VERIFIER_SECRET=/m.test(mevcut)) {
-    console.error('✖ web/.env.local içinde zaten bir VERIFIER_SECRET var.');
-    console.error('  Üzerine yazmıyorum — mevcut anahtarla imzalanmış emanetler geçersiz kalırdı.');
-    process.exit(1);
+
+  // .env.local çoğu zaman .env.example'ın kopyası olarak başlar, yani içinde
+  // `VERIFIER_SECRET=your-ed25519-seed-here` gibi bir placeholder bulunur.
+  // Placeholder'ı gerçek anahtar sanıp reddetmek kurulumu kilitlerdi; ama
+  // GERÇEK bir anahtarın üzerine yazmak da o anahtarla imzalanmış emanetleri
+  // çöpe atardı. Ayrım tek kriterle yapılır: değer 64 hane hex mi?
+  const mevcutSatir = mevcut.match(/^VERIFIER_SECRET=(.*)$/m);
+  if (mevcutSatir) {
+    const deger = mevcutSatir[1].trim();
+    if (/^[0-9a-fA-F]{64}$/.test(deger)) {
+      console.error('✖ web/.env.local içinde GERÇEK bir VERIFIER_SECRET var.');
+      console.error('  Üzerine yazmıyorum — o anahtarla imzalanmış emanetler geçersiz kalırdı.');
+      console.error('  Bilerek döndürmek istiyorsanız satırı elle silin, sonra tekrar çalıştırın.');
+      console.error('  Kontrattaki anahtarı da güncellemeyi unutmayın: set_verifier');
+      process.exit(1);
+    }
+    console.log(`ℹ Placeholder değer bulundu (${JSON.stringify(deger)}), gerçek anahtarla değiştiriliyor.`);
+    mevcut = mevcut.replace(/^VERIFIER_SECRET=.*$/m, `VERIFIER_SECRET=${seed.toString('hex')}`);
+    writeFileSync(target, mevcut, { mode: 0o600 });
+  } else {
+    if (mevcut && !mevcut.endsWith('\n')) mevcut += '\n';
+    writeFileSync(target, `${mevcut}VERIFIER_SECRET=${seed.toString('hex')}\n`, { mode: 0o600 });
   }
-  if (mevcut && !mevcut.endsWith('\n')) mevcut += '\n';
-  writeFileSync(target, `${mevcut}VERIFIER_SECRET=${seed.toString('hex')}\n`, { mode: 0o600 });
+
+  // writeFileSync'in `mode` seçeneği yalnızca dosya YENİ oluşturulurken
+  // uygulanır; .env.local zaten varsa izinler 644'te kalırdı. Bu dosya
+  // verifier'ın private key'ini tutuyor — açıkça daraltıyoruz.
+  chmodSync(target, 0o600);
 
   console.log('✓ Verifier anahtar çifti üretildi.');
   console.log(`  private -> web/.env.local  (gitignore'da, mod 600, ekrana YAZILMADI)`);
