@@ -520,6 +520,8 @@ mod test;
 #[cfg(test)]
 mod test_claim;
 #[cfg(test)]
+mod test_crosslang;
+#[cfg(test)]
 mod test_deposit;
 #[cfg(test)]
 mod test_fuzz;
