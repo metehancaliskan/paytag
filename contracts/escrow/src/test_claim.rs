@@ -1,9 +1,10 @@
 #![cfg(test)]
-//! Faz 2.3 testleri — `claim`. Kontratın en kritik bloğu.
+//! Phase 2.3 tests — `claim`. The contract's most critical block.
 //!
-//! SPEC.md §5 kırmızı takım tablosundan karşılananlar:
-//! #1 sahte imza, #2 replay, #3 kontratlar arası taşıma, #4 alıcı değişimi,
-//! #5 kimlik değişimi, #6 süresi geçmiş imza, #7 çifte claim, #12 batch atomikliği.
+//! Covered from the SPEC.md §5 red-team table:
+//! #1 forged signature, #2 replay, #3 cross-contract transplant, #4 recipient
+//! swap, #5 identity swap, #6 expired signature, #7 double claim,
+//! #12 batch atomicity.
 
 use super::*;
 use ed25519_dalek::{Signer, SigningKey};
@@ -31,8 +32,8 @@ struct Fix<'a> {
     env: Env,
     client: PaytagEscrowClient<'a>,
     contract_id: Address,
-    gonderen: Address,
-    alici: Address,
+    sender: Address,
+    recipient: Address,
     token: Address,
     identity: BytesN<32>,
     sk: SigningKey,
@@ -43,8 +44,8 @@ fn fix() -> Fix<'static> {
     env.mock_all_auths();
     env.ledger().set_sequence_number(START_LEDGER);
 
-    // Verifier anahtar çifti. Gerçekte private key sunucuda kalır;
-    // burada imzayı üretebilmek için testin elinde.
+    // The verifier keypair. In production the private key stays on the server;
+    // here the test holds it so it can produce signatures.
     let sk = SigningKey::from_bytes(&[3u8; 32]);
     let verifier = BytesN::from_array(&env, &sk.verifying_key().to_bytes());
 
@@ -55,25 +56,25 @@ fn fix() -> Fix<'static> {
     let token = env
         .register_stellar_asset_contract_v2(Address::generate(&env))
         .address();
-    let gonderen = Address::generate(&env);
-    token::StellarAssetClient::new(&env, &token).mint(&gonderen, &1_000);
+    let sender = Address::generate(&env);
+    token::StellarAssetClient::new(&env, &token).mint(&sender, &1_000);
 
     let identity = BytesN::from_array(&env, &TORVALDS);
-    let alici = Address::generate(&env);
+    let recipient = Address::generate(&env);
 
     Fix {
         env,
         client,
         contract_id,
-        gonderen,
-        alici,
+        sender,
+        recipient,
         token,
         identity,
         sk,
     }
 }
 
-fn bakiye(f: &Fix, who: &Address) -> i128 {
+fn balance(f: &Fix, who: &Address) -> i128 {
     token::Client::new(&f.env, &f.token).balance(who)
 }
 
@@ -83,9 +84,9 @@ fn strkey56(addr: &Address) -> [u8; 56] {
     buf
 }
 
-/// Kontrattaki `claim_preimage` ile AYNI düzeni bağımsız olarak kurar.
-/// Kasıtlı olarak kontratın kodunu çağırmıyor: iki uygulama ayrışırsa
-/// testler bunu yakalasın. SPEC.md §4.1
+/// Builds the SAME layout as `claim_preimage` in the contract, independently.
+/// Deliberately does not call the contract's code: if the two implementations
+/// diverge, the tests should catch it. SPEC.md §4.1
 fn preimage(
     contract: &Address,
     identity: &[u8; 32],
@@ -103,8 +104,8 @@ fn preimage(
     b
 }
 
-/// Verifier'ın yetki imzası.
-fn imzala(
+/// The verifier's authorization signature.
+fn sign(
     sk: &SigningKey,
     contract: &Address,
     identity: &[u8; 32],
@@ -116,329 +117,234 @@ fn imzala(
         .to_bytes()
 }
 
-/// Doğru imzayı üretir (mutlu yol).
-fn gecerli_imza(f: &Fix, nonce: &[u8; 32]) -> BytesN<64> {
+/// Produces the correct signature (the happy path).
+fn valid_signature(f: &Fix, nonce: &[u8; 32]) -> BytesN<64> {
     BytesN::from_array(
         &f.env,
-        &imzala(
+        &sign(
             &f.sk,
             &f.contract_id,
             &TORVALDS,
-            &f.alici,
+            &f.recipient,
             SIG_EXPIRES,
             nonce,
         ),
     )
 }
 
-fn yatir(f: &Fix, tutar: i128) -> u64 {
+fn deposit(f: &Fix, amount: i128) -> u64 {
     f.client
-        .deposit(&f.gonderen, &f.identity, &f.token, &tutar, &PAY_EXPIRY)
+        .deposit(&f.sender, &f.identity, &f.token, &amount, &PAY_EXPIRY)
 }
 
-// ---------------------------------------------------------------- mutlu yol
+// --------------------------------------------------------------- happy path
 
 #[test]
-fn claim_gecerli_imzayla_parayi_aliciya_verir() {
+fn claim_with_a_valid_signature_pays_the_recipient() {
     let f = fix();
-    let id = yatir(&f, 300);
-    assert_eq!(bakiye(&f, &f.contract_id), 300);
-    assert_eq!(bakiye(&f, &f.alici), 0);
+    let id = deposit(&f, 300);
+    assert_eq!(balance(&f, &f.contract_id), 300);
+    assert_eq!(balance(&f, &f.recipient), 0);
 
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
 
-    assert_eq!(bakiye(&f, &f.alici), 300);
-    assert_eq!(bakiye(&f, &f.contract_id), 0);
+    assert_eq!(balance(&f, &f.recipient), 300);
+    assert_eq!(balance(&f, &f.contract_id), 0);
     assert_eq!(f.client.get_payment(&id).status, Status::Claimed);
 }
 
-/// Tek imzayla birden çok ödeme toplanabilir.
+/// A single signature can collect several payments.
 #[test]
-fn claim_coklu_odemeyi_tek_cagrida_toplar() {
+fn claim_collects_multiple_payments_in_one_call() {
     let f = fix();
-    let a = yatir(&f, 100);
-    let b = yatir(&f, 200);
-    let c = yatir(&f, 50);
+    let a = deposit(&f, 100);
+    let b = deposit(&f, 200);
+    let c = deposit(&f, 50);
 
     f.client.claim(
         &vec![&f.env, a, b, c],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
 
-    assert_eq!(bakiye(&f, &f.alici), 350);
-    assert_eq!(bakiye(&f, &f.contract_id), 0);
+    assert_eq!(balance(&f, &f.recipient), 350);
+    assert_eq!(balance(&f, &f.contract_id), 0);
 }
 
-// ------------------------------------------------------------ imza saldırıları
+// ---------------------------------------------------------- signature attacks
 
-/// SPEC.md §5 #1 — uydurma imza reddedilir.
+/// SPEC.md §5 #1 — a made-up signature is rejected.
 #[test]
 #[should_panic]
-fn claim_sahte_imza_reddedilir() {
+fn claim_rejects_a_forged_signature() {
     let f = fix();
-    let id = yatir(&f, 300);
+    let id = deposit(&f, 300);
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
         &BytesN::from_array(&f.env, &[9u8; 64]),
     );
 }
 
-/// Başka bir anahtarla atılmış geçerli imza da reddedilir.
+/// A signature that is valid but made with a different key is rejected too.
 #[test]
 #[should_panic]
-fn claim_baska_anahtarin_imzasi_reddedilir() {
+fn claim_rejects_a_signature_from_another_key() {
     let f = fix();
-    let id = yatir(&f, 300);
-    let sahte_sk = SigningKey::from_bytes(&[99u8; 32]);
-    let sig = imzala(
-        &sahte_sk,
+    let id = deposit(&f, 300);
+    let wrong_sk = SigningKey::from_bytes(&[99u8; 32]);
+    let sig = sign(
+        &wrong_sk,
         &f.contract_id,
         &TORVALDS,
-        &f.alici,
+        &f.recipient,
         SIG_EXPIRES,
         &NONCE_A,
     );
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
         &BytesN::from_array(&f.env, &sig),
     );
 }
 
-/// SPEC.md §5 #4 — alıcı değiştirilirse imza tutmaz.
-/// Araya giren biri alıcıyı kendi adresiyle değiştirip parayı yönlendiremez.
+/// SPEC.md §5 #4 — swap the recipient and the signature no longer holds.
+/// Someone in the middle cannot substitute their own address and redirect
+/// the money.
 #[test]
 #[should_panic]
-fn claim_baska_alici_icin_imza_reddedilir() {
+fn claim_rejects_a_signature_for_another_recipient() {
     let f = fix();
-    let id = yatir(&f, 300);
-    let saldirgan = Address::generate(&f.env);
+    let id = deposit(&f, 300);
+    let attacker = Address::generate(&f.env);
 
-    // İmza f.alici için üretildi, çağrı saldirgan için yapılıyor.
-    let sig = gecerli_imza(&f, &NONCE_A);
+    // The signature was produced for f.recipient, the call is made for attacker.
+    let sig = valid_signature(&f, &NONCE_A);
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &saldirgan,
+        &attacker,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
         &sig,
     );
 }
 
-/// SPEC.md §5 #5 — başka kimlik için alınmış imza kullanılamaz.
+/// SPEC.md §5 #5 — a signature obtained for another identity cannot be used.
 #[test]
 #[should_panic]
-fn claim_baska_kimlik_icin_imza_reddedilir() {
+fn claim_rejects_a_signature_for_another_identity() {
     let f = fix();
-    let id = yatir(&f, 300);
+    let id = deposit(&f, 300);
 
-    // metehancaliskan için imza, torvalds'ın parasını çekmeye çalışıyor.
-    let sig = imzala(
+    // A signature for metehancaliskan, trying to withdraw torvalds' money.
+    let sig = sign(
         &f.sk,
         &f.contract_id,
         &METEHAN,
-        &f.alici,
+        &f.recipient,
         SIG_EXPIRES,
         &NONCE_A,
     );
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
         &BytesN::from_array(&f.env, &sig),
     );
 }
 
-/// SPEC.md §5 #3 — aynı verifier'ı kullanan başka bir kontrata imza taşınamaz.
-/// preimage'daki contract_id bunu engeller.
+/// SPEC.md §5 #3 — a signature cannot be transplanted to another contract
+/// that uses the same verifier. The contract_id inside the preimage prevents it.
 #[test]
 #[should_panic]
-fn claim_baska_kontrat_icin_imza_reddedilir() {
+fn claim_rejects_a_signature_for_another_contract() {
     let f = fix();
-    let id = yatir(&f, 300);
+    let id = deposit(&f, 300);
 
-    // İkinci bir escrow kontratı; imza onun adresi için üretiliyor.
-    let ikinci = env_register_ikinci(&f);
-    let sig = imzala(&f.sk, &ikinci, &TORVALDS, &f.alici, SIG_EXPIRES, &NONCE_A);
+    // A second escrow contract; the signature is produced for its address.
+    let second = register_second_contract(&f);
+    let sig = sign(
+        &f.sk,
+        &second,
+        &TORVALDS,
+        &f.recipient,
+        SIG_EXPIRES,
+        &NONCE_A,
+    );
 
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
         &BytesN::from_array(&f.env, &sig),
     );
 }
 
-fn env_register_ikinci(f: &Fix) -> Address {
+fn register_second_contract(f: &Fix) -> Address {
     f.env.register(PaytagEscrow, ())
 }
 
-/// SPEC.md §5 #6 — süresi geçmiş imza kullanılamaz.
-/// Bir kez sızan yetki kalıcı arka kapıya dönüşmemeli.
+/// SPEC.md §5 #6 — an expired signature cannot be used.
+/// Authorization that leaks once must not become a permanent backdoor.
 #[test]
-fn claim_suresi_gecmis_imza_reddedilir() {
+fn claim_rejects_an_expired_signature() {
     let f = fix();
-    let id = yatir(&f, 300);
+    let id = deposit(&f, 300);
     f.env.ledger().set_sequence_number(SIG_EXPIRES + 1);
 
     let r = f.client.try_claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
     assert_eq!(r, Err(Ok(Error::SignatureExpired)));
-    assert_eq!(bakiye(&f, &f.contract_id), 300, "para kıpırdamamalı");
+    assert_eq!(balance(&f, &f.contract_id), 300, "the money must not budge");
 }
 
-/// SPEC.md §5 #2 — aynı nonce ikinci kez kullanılamaz (replay).
+/// A signature whose lifetime runs past the contract's ceiling is refused with
+/// its own error code, not with the deposit-window one.
+///
+/// The distinction matters to whoever has to read the failure: telling someone
+/// their escrow window is too long when the real problem is the authorization
+/// sends them looking in the wrong place entirely.
 #[test]
-fn claim_ayni_nonce_ikinci_kez_reddedilir() {
+fn claim_rejects_a_signature_that_lives_too_long() {
     let f = fix();
-    let a = yatir(&f, 100);
-    let b = yatir(&f, 200);
-    let sig = gecerli_imza(&f, &NONCE_A);
+    let id = deposit(&f, 300);
 
-    f.client.claim(
-        &vec![&f.env, a],
-        &f.identity,
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_A),
-        &SIG_EXPIRES,
-        &sig,
-    );
-
-    // Aynı imza + aynı nonce ile ikinci ödemeyi de çekmeye çalış.
-    let r = f.client.try_claim(
-        &vec![&f.env, b],
-        &f.identity,
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_A),
-        &SIG_EXPIRES,
-        &sig,
-    );
-    assert_eq!(r, Err(Ok(Error::NonceAlreadyUsed)));
-    assert_eq!(bakiye(&f, &f.alici), 100, "yalnızca ilk claim geçmeli");
-}
-
-/// Farklı nonce ile ikinci claim meşrudur.
-#[test]
-fn claim_farkli_nonce_ile_ikinci_kez_calisir() {
-    let f = fix();
-    let a = yatir(&f, 100);
-    let b = yatir(&f, 200);
-
-    f.client.claim(
-        &vec![&f.env, a],
-        &f.identity,
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_A),
-        &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
-    );
-    f.client.claim(
-        &vec![&f.env, b],
-        &f.identity,
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_B),
-        &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_B),
-    );
-
-    assert_eq!(bakiye(&f, &f.alici), 300);
-}
-
-// ------------------------------------------------------------ ödeme kuralları
-
-/// SPEC.md §5 #7 — aynı ödeme iki kez claim edilemez.
-#[test]
-fn claim_edilmis_odeme_tekrar_claim_edilemez() {
-    let f = fix();
-    let id = yatir(&f, 300);
-    f.client.claim(
-        &vec![&f.env, id],
-        &f.identity,
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_A),
-        &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
-    );
-
-    let r = f.client.try_claim(
-        &vec![&f.env, id],
-        &f.identity,
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_B),
-        &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_B),
-    );
-    assert_eq!(r, Err(Ok(Error::AlreadySettled)));
-    assert_eq!(bakiye(&f, &f.alici), 300, "çifte ödeme olmamalı");
-}
-
-/// Geçerli imzayla BAŞKA bir kimliğe ait ödeme çekilemez.
-/// İmza doğru, ama ödemenin etiketi tutmuyor.
-#[test]
-fn claim_baska_kimligin_odemesini_cekemez() {
-    let f = fix();
-    let baskasi = BytesN::from_array(&f.env, &METEHAN);
-    let id = f
-        .client
-        .deposit(&f.gonderen, &baskasi, &f.token, &300, &PAY_EXPIRY);
-
-    let r = f.client.try_claim(
-        &vec![&f.env, id],
-        &f.identity, // torvalds imzası
-        &f.alici,
-        &BytesN::from_array(&f.env, &NONCE_A),
-        &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
-    );
-    assert_eq!(r, Err(Ok(Error::IdentityMismatch)));
-    assert_eq!(bakiye(&f, &f.contract_id), 300);
-}
-
-/// Ödemenin süresi dolduysa artık gönderenindir; claim edilemez.
-#[test]
-fn claim_suresi_dolmus_odemeyi_cekemez() {
-    let f = fix();
-    let id = yatir(&f, 300);
-
-    let gec = PAY_EXPIRY + 1;
-    f.env.ledger().set_sequence_number(gec);
+    let far = START_LEDGER + MAX_EXPIRY_LEDGERS + 1;
     let sig = BytesN::from_array(
         &f.env,
-        &imzala(
+        &sign(
             &f.sk,
             &f.contract_id,
             &TORVALDS,
-            &f.alici,
-            gec + 100,
+            &f.recipient,
+            far,
             &NONCE_A,
         ),
     );
@@ -446,85 +352,237 @@ fn claim_suresi_dolmus_odemeyi_cekemez() {
     let r = f.client.try_claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
-        &(gec + 100),
+        &far,
+        &sig,
+    );
+    // The signature itself is perfectly valid — it is the window that is not.
+    assert_eq!(r, Err(Ok(Error::SignatureLifetimeTooLong)));
+    assert_eq!(balance(&f, &f.contract_id), 300, "the money must not budge");
+}
+
+/// SPEC.md §5 #2 — the same nonce cannot be used twice (replay).
+#[test]
+fn claim_rejects_the_same_nonce_twice() {
+    let f = fix();
+    let a = deposit(&f, 100);
+    let b = deposit(&f, 200);
+    let sig = valid_signature(&f, &NONCE_A);
+
+    f.client.claim(
+        &vec![&f.env, a],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_A),
+        &SIG_EXPIRES,
+        &sig,
+    );
+
+    // Try to withdraw the second payment too, with the same signature and nonce.
+    let r = f.client.try_claim(
+        &vec![&f.env, b],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_A),
+        &SIG_EXPIRES,
+        &sig,
+    );
+    assert_eq!(r, Err(Ok(Error::NonceAlreadyUsed)));
+    assert_eq!(
+        balance(&f, &f.recipient),
+        100,
+        "only the first claim may go through"
+    );
+}
+
+/// A second claim with a different nonce is legitimate.
+#[test]
+fn claim_works_a_second_time_with_a_different_nonce() {
+    let f = fix();
+    let a = deposit(&f, 100);
+    let b = deposit(&f, 200);
+
+    f.client.claim(
+        &vec![&f.env, a],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_A),
+        &SIG_EXPIRES,
+        &valid_signature(&f, &NONCE_A),
+    );
+    f.client.claim(
+        &vec![&f.env, b],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_B),
+        &SIG_EXPIRES,
+        &valid_signature(&f, &NONCE_B),
+    );
+
+    assert_eq!(balance(&f, &f.recipient), 300);
+}
+
+// ------------------------------------------------------------ payment rules
+
+/// SPEC.md §5 #7 — the same payment cannot be claimed twice.
+#[test]
+fn a_claimed_payment_cannot_be_claimed_again() {
+    let f = fix();
+    let id = deposit(&f, 300);
+    f.client.claim(
+        &vec![&f.env, id],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_A),
+        &SIG_EXPIRES,
+        &valid_signature(&f, &NONCE_A),
+    );
+
+    let r = f.client.try_claim(
+        &vec![&f.env, id],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_B),
+        &SIG_EXPIRES,
+        &valid_signature(&f, &NONCE_B),
+    );
+    assert_eq!(r, Err(Ok(Error::AlreadySettled)));
+    assert_eq!(
+        balance(&f, &f.recipient),
+        300,
+        "there must be no double payout"
+    );
+}
+
+/// A valid signature cannot withdraw a payment belonging to ANOTHER identity.
+/// The signature is correct, but the payment's tag does not match.
+#[test]
+fn claim_cannot_withdraw_another_identitys_payment() {
+    let f = fix();
+    let someone_else = BytesN::from_array(&f.env, &METEHAN);
+    let id = f
+        .client
+        .deposit(&f.sender, &someone_else, &f.token, &300, &PAY_EXPIRY);
+
+    let r = f.client.try_claim(
+        &vec![&f.env, id],
+        &f.identity, // torvalds signature
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_A),
+        &SIG_EXPIRES,
+        &valid_signature(&f, &NONCE_A),
+    );
+    assert_eq!(r, Err(Ok(Error::IdentityMismatch)));
+    assert_eq!(balance(&f, &f.contract_id), 300);
+}
+
+/// Once a payment has expired it belongs to the sender again; it cannot be claimed.
+#[test]
+fn claim_cannot_withdraw_an_expired_payment() {
+    let f = fix();
+    let id = deposit(&f, 300);
+
+    let late = PAY_EXPIRY + 1;
+    f.env.ledger().set_sequence_number(late);
+    let sig = BytesN::from_array(
+        &f.env,
+        &sign(
+            &f.sk,
+            &f.contract_id,
+            &TORVALDS,
+            &f.recipient,
+            late + 100,
+            &NONCE_A,
+        ),
+    );
+
+    let r = f.client.try_claim(
+        &vec![&f.env, id],
+        &f.identity,
+        &f.recipient,
+        &BytesN::from_array(&f.env, &NONCE_A),
+        &(late + 100),
         &sig,
     );
     assert_eq!(r, Err(Ok(Error::PaymentExpired)));
 }
 
 #[test]
-fn claim_bos_liste_reddedilir() {
+fn claim_rejects_an_empty_list() {
     let f = fix();
     let r = f.client.try_claim(
         &vec![&f.env],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
     assert_eq!(r, Err(Ok(Error::NoPayments)));
 }
 
-/// SPEC.md §5 #12 — toplu claim atomiktir.
-/// Listeye tek bir geçersiz id sıkıştırmak TÜM çağrıyı geri almalı;
-/// aksi halde saldırgan kısmi başarıyla durumu bozabilirdi.
+/// SPEC.md §5 #12 — a batch claim is atomic.
+/// Slipping a single invalid id into the list must roll the WHOLE call back;
+/// otherwise an attacker could corrupt state through partial success.
 #[test]
-fn claim_batch_atomiktir() {
+fn claim_batch_is_atomic() {
     let f = fix();
-    let a = yatir(&f, 100);
-    let b = yatir(&f, 200);
+    let a = deposit(&f, 100);
+    let b = deposit(&f, 200);
 
     let r = f.client.try_claim(
-        &vec![&f.env, a, 999, b], // 999 diye bir ödeme yok
+        &vec![&f.env, a, 999, b], // there is no payment 999
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
 
     assert_eq!(r, Err(Ok(Error::PaymentNotFound)));
-    assert_eq!(bakiye(&f, &f.alici), 0, "hiçbir ödeme geçmemeli");
-    assert_eq!(bakiye(&f, &f.contract_id), 300);
+    assert_eq!(balance(&f, &f.recipient), 0, "no payment may go through");
+    assert_eq!(balance(&f, &f.contract_id), 300);
     assert_eq!(f.client.get_payment(&a).status, Status::Pending);
     assert_eq!(f.client.get_payment(&b).status, Status::Pending);
 }
 
-/// Claim edilmiş ödeme sonradan refund edilemez (SPEC.md §5 #10 tamamlayıcı).
+/// A claimed payment cannot be refunded afterwards (complements SPEC.md §5 #10).
 #[test]
-fn claim_edilmis_odeme_refund_edilemez() {
+fn a_claimed_payment_cannot_be_refunded() {
     let f = fix();
-    let id = yatir(&f, 300);
+    let id = deposit(&f, 300);
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
 
     f.env.ledger().set_sequence_number(PAY_EXPIRY + 1);
     assert_eq!(f.client.try_refund(&id), Err(Ok(Error::AlreadySettled)));
-    assert_eq!(bakiye(&f, &f.gonderen), 700, "gönderen para geri alamaz");
+    assert_eq!(
+        balance(&f, &f.sender),
+        700,
+        "the sender cannot get the money back"
+    );
 }
 
-// ------------------------------------------------------------------- olaylar
+// -------------------------------------------------------------------- events
 
 #[test]
-fn claim_olayi_identity_topicli_yayinlanir() {
+fn claim_event_is_published_with_an_identity_topic() {
     let f = fix();
-    let id = yatir(&f, 300);
+    let id = deposit(&f, 300);
     f.client.claim(
         &vec![&f.env, id],
         &f.identity,
-        &f.alici,
+        &f.recipient,
         &BytesN::from_array(&f.env, &NONCE_A),
         &SIG_EXPIRES,
-        &gecerli_imza(&f, &NONCE_A),
+        &valid_signature(&f, &NONCE_A),
     );
 
     assert_eq!(
@@ -538,7 +596,10 @@ fn claim_olayi_identity_topicli_yayinlanir() {
                     &f.env,
                     [
                         (Symbol::new(&f.env, "payment_id"), id.into_val(&f.env)),
-                        (Symbol::new(&f.env, "recipient"), f.alici.into_val(&f.env)),
+                        (
+                            Symbol::new(&f.env, "recipient"),
+                            f.recipient.into_val(&f.env)
+                        ),
                         (Symbol::new(&f.env, "token"), f.token.into_val(&f.env)),
                         (Symbol::new(&f.env, "amount"), 300i128.into_val(&f.env)),
                     ]
@@ -549,16 +610,16 @@ fn claim_olayi_identity_topicli_yayinlanir() {
     );
 }
 
-// ------------------------------------------------------- SPEC altın vektörü
+// -------------------------------------------------------- SPEC golden vector
 
-/// SPEC.md §4.2'deki çalışılmış örneği kontratın KENDİ kodu üzerinden
-/// doğrular. Faz 3'te TypeScript verifier'ı aynı preimage'ı üretmek
-/// zorunda; bu test o sözleşmenin Rust tarafındaki çıpası.
+/// Verifies the worked example from SPEC.md §4.2 through the contract's OWN
+/// code. In phase 3 the TypeScript verifier has to produce the same preimage;
+/// this test is the Rust-side anchor of that contract.
 ///
-/// Kontratı SPEC'teki adreste kaydediyoruz ki `current_contract_address()`
-/// beklenen strkey'i döndürsün.
+/// We register the contract at the address from the SPEC so that
+/// `current_contract_address()` returns the expected strkey.
 #[test]
-fn preimage_spec_altin_vektorune_uyuyor() {
+fn preimage_matches_the_spec_golden_vector() {
     let env = Env::default();
 
     let spec_contract = Address::from_string(&String::from_str(
@@ -582,7 +643,7 @@ fn preimage_spec_altin_vektorune_uyuyor() {
         PaytagEscrow::claim_preimage(&env, &identity, &spec_recipient, 1_000_000, &nonce).unwrap()
     });
 
-    assert_eq!(pre.len(), 195, "preimage 195 bayt olmalı");
+    assert_eq!(pre.len(), 195, "the preimage must be 195 bytes");
 
     // SPEC.md §4.2: sha256(preimage)
     const SPEC_HASH: [u8; 32] = [
@@ -593,11 +654,11 @@ fn preimage_spec_altin_vektorune_uyuyor() {
     assert_eq!(
         env.crypto().sha256(&pre).to_bytes(),
         BytesN::from_array(&env, &SPEC_HASH),
-        "kontratın preimage'ı SPEC.md §4.2 ile uyuşmuyor"
+        "the contract's preimage does not match SPEC.md §4.2"
     );
 
-    // Testteki bağımsız uygulama da aynı sonucu vermeli.
-    let bagimsiz = preimage(
+    // The test's independent implementation must give the same result.
+    let independent = preimage(
         &spec_contract,
         &TORVALDS,
         &spec_recipient,
@@ -606,7 +667,7 @@ fn preimage_spec_altin_vektorune_uyuyor() {
     );
     assert_eq!(
         env.crypto()
-            .sha256(&soroban_sdk::Bytes::from_slice(&env, &bagimsiz))
+            .sha256(&soroban_sdk::Bytes::from_slice(&env, &independent))
             .to_bytes(),
         BytesN::from_array(&env, &SPEC_HASH)
     );

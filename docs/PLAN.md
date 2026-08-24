@@ -1,80 +1,80 @@
-# Paytag — Build Planı
+# Paytag — Build Plan
 
-**Proje:** Paytag — GitHub & X handle'larına claim edilebilir USDC ödemeleri
-**Kaynak:** Instawards SOW, 30 gün, $5.000, 3 deliverable
-**Stack:** Next.js 15 (App Router, TS) + Rust/`soroban-sdk` 26.x + `stellar-cli` 27.x + Postgres (Neon)
-**Plan tarihi:** 19.08.2026
+**Project:** Paytag — claimable USDC payments to GitHub & X handles
+**Source:** Instawards SOW, 30 days, $5,000, 3 deliverables
+**Stack:** Next.js 16 (App Router, TS) + Rust/`soroban-sdk` 26.x + `stellar-cli` 27.x + Supabase (Postgres)
+**Plan date:** 2026-08-19
 
 ---
 
-## 0. Mimari — tek paragrafta
+## 0. Architecture — in one paragraph
 
-Gönderen, alıcının cüzdanını bilmeden bir **internet kimliğine** (GitHub user/repo, X user, Paytag nick) USDC gönderir. Para Soroban kontratında `identity_key` etiketiyle emanette (escrow) bekler. Alıcı gelir, GitHub OAuth ile handle'ının sahibi olduğunu kanıtlar; **off-chain verifier servisi** bunu doğrulayıp ed25519 ile imzalı bir "claim yetkisi" üretir; kontrat bu imzayı `env.crypto().ed25519_verify` ile doğrular ve parayı alıcının cüzdanına salar. Kimse gelmezse expiry ledger'ından sonra gönderen `refund` çağırır.
+The sender sends USDC to an **internet identity** (GitHub user/repo, X user, Paytag nick) without knowing the recipient's wallet. The money sits in escrow in a Soroban contract, tagged with an `identity_key`. The recipient shows up and proves via GitHub OAuth that they own the handle; an **off-chain verifier service** checks that and produces an ed25519-signed "claim authorization"; the contract verifies the signature with `env.crypto().ed25519_verify` and releases the money to the recipient's wallet. If nobody shows up, the sender calls `refund` after the expiry ledger.
 
 ```
-Gönderen cüzdanı ──deposit(identity_key, token, amount, expiry)──▶ ┌──────────────────┐
-                                                                    │ Soroban Escrow   │
-GitHub ──OAuth──▶ Verifier API ──ed25519 imzalı claim auth──▶       │ Contract         │
-                  (Next.js route)                                   │ (identity-tagged)│
-Alıcı cüzdanı ◀──claim(payment_ids, recipient, sig)───────────────  └──────────────────┘
-Gönderen cüzdanı ◀──refund(payment_id) [expiry sonrası]────────────
+Sender wallet ──deposit(identity_key, token, amount, expiry)──▶ ┌──────────────────┐
+                                                                │ Soroban Escrow   │
+GitHub ──OAuth──▶ Verifier API ──ed25519-signed claim auth──▶   │ Contract         │
+                  (Next.js route)                               │ (identity-tagged)│
+Recipient wallet ◀──claim(payment_ids, recipient, sig)────────  └──────────────────┘
+Sender wallet ◀──refund(payment_id) [after expiry]──────────────
 ```
 
-### Kritik tasarım kararı: neden "verifier imzası" deseni
+### The critical design decision: why the "verifier signature" pattern
 
-Kontrat GitHub'a HTTP isteği atamaz. Zinciri dış dünyaya bağlamanın tek yolu, off-chain bir tarafın doğrulama yapıp sonucu **imzalaması** ve kontratın imzayı doğrulaması. Bu bir güven varsayımı yaratır: verifier'ın private key'i ele geçerse yanlış kişi claim edebilir. Bunu README'de **açıkça yazacağız** — jüri gizlenmiş güven varsayımından hoşlanmaz, dürüstçe belgelenmişinden hoşlanır. MVP sonrası azaltma yolu: multi-sig verifier seti veya zkTLS/attestation. Kapsam dışı, ama yol haritasına yazılır.
+The contract cannot make an HTTP request to GitHub. The only way to connect the chain to the outside world is for an off-chain party to do the verification and **sign** the result, with the contract verifying the signature. That creates a trust assumption: if the verifier's private key is compromised, the wrong person can claim. We will **say this out loud** in the README — judges don't like a hidden trust assumption, they like an honestly documented one. Post-MVP mitigation path: a multi-sig verifier set, or zkTLS/attestation. Out of scope, but it goes on the roadmap.
 
 ---
 
-## 1. Stack seçimi — neden bu
+## 1. Stack choices — why these
 
-| Karar | Seçim | Gerekçe |
+| Decision | Choice | Rationale |
 |---|---|---|
-| Kontrat dili | Rust + `soroban-sdk` 26.x | Soroban'ın tek birinci sınıf dili. Alternatif yok. |
-| CLI | `stellar-cli` 27.1 | `contract build/deploy/invoke` + **`bindings typescript`** → kontrattan tipli TS client üretir, elle RPC/XDR yazmayı sıfırlar. |
-| Frontend + backend | **Tek Next.js uygulaması** | Kritik neden: verifier'ın imza attığı ed25519 private key **asla tarayıcıya gitmemeli**. Next.js API route'ları bu sırrı sunucu tarafında tutar, ayrı bir servis deploy etmeye gerek kalmaz. GitHub OAuth callback'i de aynı origin'de olur — CORS/cookie derdi yok. 30 günde iki servis deploy etmek/senkronlamak saf kayıp. |
-| Cüzdan | Stellar Wallets Kit | Freighter + xBull + Albedo + Lobstr'ı tek arayüzle verir. Freighter'a tek başına bağlanmak jüriye "sadece bir cüzdan destekliyor" gösterir. |
-| DB | Postgres (Neon free) + Drizzle | Nickname kaydı, OAuth oturumu, indekslenmiş event'ler için gerekli. Neon: kredi kartı yok, branch'lenebilir, Vercel entegre. Drizzle: Prisma'nın aksine serverless'ta cold-start yemez. |
-| Deploy | Vercel + Stellar Testnet | Canlı demo linki SOW'da zorunlu (Deliverable 3). Vercel = 1 komut. |
-| Token | Testnet'te kendi ürettiğimiz `USDC` SAC'ı | Testnet'te resmî Circle USDC yok. Kendi issuer'ımızla `USDC:GXXX` çıkarıp `stellar contract asset deploy` ile SAC'a çeviririz. Kontrat SEP-41 arayüzüne konuştuğu için mainnet USDC'ye geçiş **tek adres değişikliği**. Bunu README'de belirtmek önemli. |
+| Contract language | Rust + `soroban-sdk` 26.x | Soroban's only first-class language. No alternative. |
+| CLI | `stellar-cli` 27.1 | `contract build/deploy/invoke` + **`bindings typescript`** → generates a typed TS client from the contract, which reduces hand-written RPC/XDR to zero. |
+| Frontend + backend | **A single Next.js app** | The critical reason: the ed25519 private key the verifier signs with **must never reach the browser**. Next.js API routes keep that secret server-side, with no separate service to deploy. The GitHub OAuth callback lands on the same origin too — no CORS/cookie pain. Deploying and keeping two services in sync in 30 days is pure loss. The OAuth code-for-token exchange itself is Supabase Auth's job, not ours, which is why the GitHub client secret never enters this repo or its environment — it lives in the Supabase dashboard. |
+| Wallet | Stellar Wallets Kit | Gives Freighter + xBull + Albedo + Lobstr behind one interface. Wiring up Freighter alone tells the judges "supports exactly one wallet". |
+| DB | **Supabase (Postgres), SQL-first schema + row level security** | Needed for nickname records, OAuth sessions, and indexed events. Supabase gives Postgres + hosted auth + RLS in one box — otherwise the auth piece was going to be hand-rolled. RLS puts the access rule next to the data instead of in application code. No ORM: the schema is small and SQL is the source of truth (`db/schema.sql`). |
+| Deploy | Vercel + Stellar Testnet | A live demo link is mandatory in the SOW (Deliverable 3). Vercel = 1 command. |
+| Token | Our own `USDC` SAC on testnet | There is no official Circle USDC on testnet. We issue `USDC:GXXX` from our own issuer and turn it into a SAC with `stellar contract asset deploy`. Because the contract speaks the SEP-41 interface, moving to mainnet USDC is **one address change**. Worth stating in the README. |
 
-**Reddedilen alternatifler:** ayrı Express backend (fazladan deploy + CORS, sıfır kazanç), Vercel Postgres (Neon'un daha pahalı sarmalayıcısı), tRPC (tek uygulamada gereksiz katman), Prisma (serverless cold-start).
+**Rejected alternatives:** a separate Express backend (extra deploy + CORS, zero gain), Vercel Postgres (a more expensive wrapper around Neon), tRPC (a pointless layer inside a single app), Prisma (serverless cold-start), Drizzle + Neon (Supabase folds Postgres, auth, and RLS into one box, which removes the reason for both the ORM and a hand-rolled auth layer).
 
 ---
 
-## 2. İş kırılımı — 6 faz, her adımda "nasıl test edilecek"
+## 2. Work breakdown — 6 phases, each step with "how it gets tested"
 
-### Faz 0 — Repo iskeleti + araç zinciri kanıtı  *(~yarım gün)*
+### Phase 0 — Repo skeleton + toolchain proof  *(~half a day)*
 
-| # | Yapılacak | Bitti kabul kriteri (test) |
+| # | To do | Definition of done (test) |
 |---|---|---|
-| 0.1 | `~/Desktop/github/paytag` monorepo: `contracts/`, `web/`, `docs/`, `scripts/` | `tree -L 2` beklenen yapıyı verir |
-| 0.2 | Rust toolchain + `wasm32v1-none` target, `stellar-cli` 27.1 kurulu | `stellar --version` ve `rustc --version` çıktısı `docs/evidence/toolchain.txt`'e yazılı |
-| 0.3 | Testnet identity + friendbot fonlama | `stellar keys address paytag-dev` bir G... adresi döner, bakiye > 0 |
-| 0.4 | **Throwaway hello-world kontrat deploy** | Testnet'te deploy olur, `invoke hello` çağrısı döner → araç zinciri kanıtlandı. Sonra silinir. |
-| 0.5 | GitHub repo (public), `.gitignore`, MIT lisans, CI iskeleti | İlk commit push'lanır, Actions yeşil |
+| 0.1 | `~/Desktop/github/paytag` monorepo: `contracts/`, `web/`, `docs/`, `scripts/` | `tree -L 2` shows the expected layout |
+| 0.2 | Rust toolchain + `wasm32v1-none` target, `stellar-cli` 27.1 installed | `stellar --version` and `rustc --version` output written to `docs/evidence/toolchain.txt` |
+| 0.3 | Testnet identity + friendbot funding | `stellar keys address paytag-dev` returns a G... address, balance > 0 |
+| 0.4 | **Throwaway hello-world contract deploy** | Deploys on testnet, `invoke hello` returns → toolchain proven. Then deleted. |
+| 0.5 | GitHub repo (public), `.gitignore`, MIT license, CI skeleton | First commit pushed, Actions green |
 
-> Neden 0.4: Faz 2'nin ortasında "deploy neden patlıyor" ile boğuşmak 30 günlük sprintte en pahalı hatadır. Araç zincirini **boş** bir kontratla kanıtla, sonra iş mantığı yaz.
+> Why 0.4: fighting "why is deploy blowing up" halfway through Phase 2 is the most expensive mistake in a 30-day sprint. Prove the toolchain with an **empty** contract, then write business logic.
 
 ---
 
-### Faz 1 — Teknik spec + veri modeli  *(~1 gün)* → SOW Hafta 1 çıktısı
+### Phase 1 — Technical spec + data model  *(~1 day)* → SOW Week 1 output
 
-| # | Yapılacak | Bitti kabul kriteri (test) |
+| # | To do | Definition of done (test) |
 |---|---|---|
-| 1.1 | `IdentityKey` şeması kesinleştir | `docs/SPEC.md`'de: `identity_key = sha256(kind_byte ‖ normalized_handle)` → `BytesN<32>`. `kind`: 0=GithubUser, 1=GithubRepo, 2=XUser, 3=PaytagNick. Normalizasyon kuralları (lowercase, trim, `owner/repo` formatı) yazılı ve **hem Rust hem TS'te aynı sonucu veren bir vektör tablosu** var |
-| 1.2 | Kontrat storage + fonksiyon imzaları | `SPEC.md`'de imza listesi, hangi storage tipi (instance/persistent/temporary) ve neden — TTL/arşivleme gerekçesiyle |
-| 1.3 | Verifier imza payload formatı | `sha256(contract_id ‖ identity_key ‖ recipient ‖ nonce ‖ expires_at_ledger)` — domain separation dahil, replay ve cross-contract saldırısına kapalı |
-| 1.4 | DB şeması + UI ekran listesi + wireframe | 6 ekran: Search, Profile/Pay page, Send, Connect wallet, Claim dashboard, Tx evidence |
-| 1.5 | **Spec review** | Kendi kendime kırmızı takım: "bu tasarımı nasıl sömürürüm?" listesi `SPEC.md` sonunda. En az 5 saldırı senaryosu ve karşılığı |
+| 1.1 | Finalize the `IdentityKey` scheme | In `docs/SPEC.md`: `identity_key = sha256(kind_byte ‖ normalized_handle)` → `BytesN<32>`. `kind`: 0=GithubUser, 1=GithubRepo, 2=XUser, 3=PaytagNick. Normalization rules (lowercase, trim, `owner/repo` format) written down, and **a vector table that yields the same result in both Rust and TS** exists |
+| 1.2 | Contract storage + function signatures | The signature list in `SPEC.md`, which storage type (instance/persistent/temporary) and why — with the TTL/archival reasoning |
+| 1.3 | Verifier signature payload format | `sha256(contract_id ‖ identity_key ‖ recipient ‖ nonce ‖ expires_at_ledger)` — domain separation included, closed to replay and cross-contract attacks |
+| 1.4 | DB schema + UI screen list + wireframe | 6 screens: Search, Profile/Pay page, Send, Connect wallet, Claim dashboard, Tx evidence |
+| 1.5 | **Spec review** | Red-team myself: a "how would I exploit this design?" list at the end of `SPEC.md`. At least 5 attack scenarios and their answers |
 
-**Test:** Spec'in testi, 1.1'deki vektör tablosunun Faz 2 ve 3'te **iki bağımsız implementasyonda** (Rust + TS) aynı hash'i üretmesi. Uyuşmazsa spec eksikti.
+**Test:** the test for the spec is that the vector table from 1.1 produces the same hash in **two independent implementations** (Rust + TS) in Phases 2 and 3. If they disagree, the spec was incomplete.
 
 ---
 
-### Faz 2 — Soroban escrow kontratı → **Deliverable 1**  *(~1 hafta)*
+### Phase 2 — Soroban escrow contract → **Deliverable 1**  *(~1 week)*
 
-**Fonksiyonlar:**
+**Functions:**
 ```rust
 init(admin: Address, verifier: BytesN<32>, default_expiry_ledgers: u32)
 deposit(from: Address, identity: BytesN<32>, token: Address, amount: i128, expiry_ledger: u32) -> u64
@@ -86,103 +86,135 @@ get_payment(id: u64) -> PaymentData        // read-only
 get_balance(identity: BytesN<32>, token: Address) -> i128
 ```
 
-**Event'ler:** `deposit`, `claim`, `refund` — hepsi `identity_key` topic'li, indexer bunları okuyacak.
+**Events:** `deposit`, `claim`, `refund` — all topic'd on `identity_key`; the indexer reads these.
 
-| # | Yapılacak | Bitti kabul kriteri (test) |
+| # | To do | Definition of done (test) |
 |---|---|---|
-| 2.1 | Tipler + storage + `init` | `cargo test` — init iki kez çağrılamaz |
-| 2.2 | `deposit` | Happy path: bakiye kontrata geçer, id döner, event çıkar. **Negatif:** `amount <= 0` panik, `from` auth'u yoksa panik, geçmiş `expiry_ledger` reddedilir |
-| 2.3 | `claim` + ed25519 doğrulama | Happy path: geçerli imza → para alıcıya geçer, payment `Claimed` olur. **Negatif (en kritik blok):** forge imza reddedilir; başka `identity` için imza reddedilir; başka `recipient` için imza reddedilir; **aynı nonce ikinci kez reddedilir (replay)**; `expires_at` geçmiş imza reddedilir; zaten claim edilmiş payment tekrar claim edilemez; expiry geçmiş payment claim edilemez |
-| 2.4 | `refund` + expiry | Expiry'den **önce** refund reddedilir; sonra kabul edilir; gönderenden başkası refund edemez; claim edilmiş payment refund edilemez |
-| 2.5 | Batch claim | 3 payment tek `claim` çağrısıyla toplanır, toplam doğru; içlerinden biri geçersizse **tüm çağrı** revert eder (atomiklik) |
-| 2.6 | Fuzz / property test | `proptest` ile: hiçbir çağrı dizisi kontrat bakiyesini `sum(unclaimed)`'dan düşük bırakamaz (**invariant: solvency**) |
-| 2.7 | Testnet deploy + gerçek işlem | Deploy tx hash + 1 deposit + 1 claim + 1 refund tx hash `docs/evidence/tx-hashes.md`'de. Explorer linkleriyle |
+| 2.1 | Types + storage + `init` | `cargo test` — init cannot be called twice |
+| 2.2 | `deposit` | Happy path: balance moves to the contract, an id is returned, an event fires. **Negative:** `amount <= 0` panics, no auth on `from` panics, a past `expiry_ledger` is rejected |
+| 2.3 | `claim` + ed25519 verification | Happy path: valid signature → money moves to the recipient, the payment becomes `Claimed`. **Negative (the most critical block):** forged signature rejected; signature for a different `identity` rejected; signature for a different `recipient` rejected; **the same nonce a second time rejected (replay)**; signature with a past `expires_at` rejected; an already-claimed payment cannot be claimed again; a payment past expiry cannot be claimed |
+| 2.4 | `refund` + expiry | Refund **before** expiry rejected; accepted after; nobody but the sender can refund; a claimed payment cannot be refunded |
+| 2.5 | Batch claim | 3 payments collected in a single `claim` call, total correct; if one of them is invalid **the whole call** reverts (atomicity) |
+| 2.6 | Fuzz / property test | With `proptest`: no sequence of calls can leave the contract balance below `sum(unclaimed)` (**invariant: solvency**) |
+| 2.7 | Testnet deploy + real transactions | Deploy tx hash + 1 deposit + 1 claim + 1 refund tx hash in `docs/evidence/tx-hashes.md`. With explorer links |
 
-**Test aracı:** `soroban_sdk::testutils` — `Env::default()`, `mock_all_auths()`, `token::StellarAssetClient` ile sahte USDC, `env.ledger().set_sequence_number()` ile expiry zıplatma.
-**Kapı:** `cargo test` %100 geçmeden Faz 3'e geçilmez. Hedef: **≥ 20 test, hepsi yeşil**, CI'da koşuyor.
+**Test tooling:** `soroban_sdk::testutils` — `Env::default()`, `mock_all_auths()`, fake USDC via `token::StellarAssetClient`, jumping expiry with `env.ledger().set_sequence_number()`.
+**Gate:** no moving to Phase 3 until `cargo test` passes 100%. Target: **≥ 20 tests, all green**, running in CI.
 
 ---
 
-### Faz 3 — GitHub doğrulama + verifier → **Deliverable 2**  *(~1 hafta)*
+### Phase 3 — GitHub verification + verifier → **Deliverable 2**  *(~1 week)*
 
-| # | Yapılacak | Bitti kabul kriteri (test) |
+| # | To do | Definition of done (test) |
 |---|---|---|
-| 3.1 | GitHub OAuth App + `/api/auth/github/callback` | Manuel: giriş yap → oturumda doğru `login` görünür. Vitest: state param uyuşmazlığı reddedilir (CSRF) |
-| 3.2 | Handle sahiplik kontrolü | OAuth token'ın `login`'i, claim edilen handle ile **birebir** eşleşmeli. Test: başkasının handle'ını claim denemesi 403 |
-| 3.3 | Repo sahiplik kontrolü | `GET /repos/{owner}/{repo}` → `permissions.admin == true`. Test: admin olmayan repo 403 |
-| 3.4 | `identity_key` TS implementasyonu | **Faz 1.1 vektör tablosunu Rust ile bit-bit karşılaştıran test.** Bu testin adı `identity-key-parity.test.ts` — Rust testinden çıkan hash'leri fixture olarak okur |
-| 3.5 | ed25519 imzalama endpoint'i (`/api/verify/claim-auth`) | Key `VERIFIER_SECRET` env'den, **asla client'a sızmıyor** — bunu test eden bir grep/CI kuralı var. Vitest: üretilen imza kontratın kabul ettiği formatta |
-| 3.6 | Nonce üretimi + tek kullanımlık kayıt | DB'de nonce tablosu, aynı nonce ikinci kez imzalanmaz. Test: eşzamanlı iki istek → biri 409 |
-| 3.7 | Paytag nickname kaydı | Nick al/çöz, çakışma reddi, rezerve kelime listesi. Test: aynı nick iki kez alınamaz |
-| 3.8 | X doğrulama — **koşullu** | X API erişimi/kotası varsa aynı desen. Yoksa `SPEC.md`'ye "API kısıtı nedeniyle ertelendi" notu + UI'da devre dışı görünür. SOW zaten "if API usage is allowed" diyor. |
-| 3.9 | **Entegrasyon testi: uçtan uca doğrulama** | Testnet'te: deposit → OAuth → imza al → `claim` çağır → para geldi. Tx hash kaydedilir |
+| 3.1 | GitHub OAuth App + OAuth callback | Manual: sign in → the right `login` shows up in the session. Vitest: a state param mismatch is rejected (CSRF). — **Built.** OAuth runs through **Supabase Auth**, so the code-for-token exchange, and with it the state handling that used to be ours, happens there and the GitHub client secret never enters this repo. The route is `web/app/auth/callback/route.ts`, not `/api/auth/github/callback`: it calls `GET api.github.com/user` with the fresh `provider_token` and writes the `identities` row with the service role. `next` is restricted to same-origin paths, and Supabase's redirect allow-list bounds it from the other side. Not yet run against a real project |
+| 3.2 | Handle ownership check | The `login` on the OAuth token must match the claimed handle **exactly**. Test: trying to claim someone else's handle gets 403. — **Built.** `/api/verify/claim-auth` loads the `identities` row for the signed-in user and answers 403 unless `identity.handle` equals the normalized requested handle. No automated test yet |
+| 3.3 | Repo ownership check | `GET /repos/{owner}/{repo}` → `permissions.admin == true`. Test: a repo where you're not admin gets 403. — **Not built.** `kind 0x01` stays reserved in the protocol; it would need the `repo` scope and the `permissions.admin` check. Outside MVP scope per SPEC §1 |
+| 3.4 | `identity_key` TS implementation | **A test that compares the Phase 1.1 vector table bit for bit against Rust.** — **Done.** `web/lib/identity-key-parity.test.ts`: the §2.3 and §2.4 vectors, the normalization equivalence set, the rejection set, and the kind-separation table. `web/lib/claim-signature-parity.test.ts` goes one further and pins the §4.2 golden signature byte for byte, which ties `lib/verifier.ts` to `paytag.mjs` and to the contract's own `claim_preimage`. 57 tests, run in CI before the build |
+| 3.5 | ed25519 signing endpoint (`/api/verify/claim-auth`) | Key comes from the `VERIFIER_SECRET` env var and **never leaks to the client** — there is a grep/CI rule that tests exactly that. Vitest: the signature produced is in the format the contract accepts. — **Built.** `web/lib/verifier.ts` reads the seed from the environment only and starts with `import "server-only"`, so a build that pulls it into a client bundle fails instead of shipping. The scanner rejects any secret carrying a `NEXT_PUBLIC_` prefix. No vitest yet |
+| 3.6 | Nonce generation + single-use record | Nonce table in the DB, the same nonce is never signed twice. Test: two concurrent requests → one gets 409. — **Built.** `public.claim_nonces`, nonce as primary key, RLS on with no policies. The row is inserted **before** the signature is produced, so a crash cannot hand out an unrecorded authorization (SPEC §4.6). A duplicate nonce now returns 409 as the criterion asked; the concurrency test itself is still missing |
+| 3.7 | Paytag nickname registry | Take/resolve a nick, collision rejection, reserved word list. Test: the same nick cannot be taken twice. — **Not built.** `kind 0x03` reserved; no table and no normalization rule yet |
+| 3.8 | X verification — **conditional** | Same pattern if X API access/quota is available. If not, a "deferred due to API restrictions" note in `SPEC.md` + shown as disabled in the UI. The SOW already says "if API usage is allowed". — **Not done**, SPEC §7.4 still open. `/api/verify/claim-auth` refuses any `kind` other than GitHub as its first check: signing for an identity we cannot verify is the same as signing for anyone |
+| 3.9 | **Integration test: end-to-end verification** | On testnet: deposit → OAuth → get signature → call `claim` → money arrived. Tx hash recorded. — **Not done.** The path is wired end to end in the UI, but it has never run against a real Supabase project, so `docs/evidence/tx-hashes.md` still has no claim transaction |
 
-**Kapı:** 3.4 (parity testi) geçmeden 3.5'e geçilmez. Rust ve TS aynı `identity_key`'i üretmiyorsa hiçbir claim çalışmaz ve bu hata en pahalı şekilde Faz 4'te ortaya çıkar.
+Setup for everything above — the OAuth App, the Supabase project, the env
+vars, and pointing the contract at the right verifier key — is in
+`docs/SETUP-AUTH.md`.
+
+**Gate:** no moving to 3.5 until 3.4 (the parity test) passes. If Rust and TS don't produce the same `identity_key`, no claim works at all, and that bug surfaces in the most expensive possible way in Phase 4. **The gate was crossed out of order** — 3.5 was written before 3.4 — but it is now closed: the parity suite exists, runs in CI ahead of the build, and covers the signature as well as the identity key. Three independent implementations of the same 195 bytes (Rust, the Node CLI, the Next.js route) are now pinned to one golden vector.
 
 ---
 
-### Faz 4 — Demo UI + uçtan uca akış → **Deliverable 3**  *(~1 hafta)*
+### Phase 4 — Demo UI + end-to-end flow → **Deliverable 3**  *(~1 week)*
 
-| # | Ekran / iş | Bitti kabul kriteri (test) |
+| # | Screen / task | Definition of done (test) |
 |---|---|---|
-| 4.1 | Cüzdan bağlama (Wallets Kit) | Freighter ile bağlan/kes, adres görünür. Manuel + Playwright (mock'lu) |
-| 4.2 | Arama: `github.com/foo`, `@foo`, `foo/bar`, nick | Playwright: 4 girdi formatı doğru identity tipine çözülür; geçersiz girdi anlaşılır hata verir |
-| 4.3 | Profil / ödeme sayfası (`/pay/github/foo`) | Bekleyen bakiye, geçmiş ödemeler, paylaşılabilir link. Playwright: 0 bakiye ve N bakiye durumları |
-| 4.4 | Gönder akışı | Tutar + expiry seç → imzala → tx onayı + explorer linki. Playwright testnet'te gerçek tx |
-| 4.5 | Claim dashboard | GitHub'a bağlan → claim edilebilirler listelenir → tek tıkla claim. Gerçek testnet claim |
-| 4.6 | Refund akışı | Expiry geçmiş ödeme için "geri al" butonu. Testnet'te kısa expiry ile gerçek refund |
-| 4.7 | Tx evidence sayfası | Tüm demo işlemleri tabloda, explorer linkli — jürinin tek bakışta göreceği yer |
-| 4.8 | Vercel deploy | Canlı URL çalışıyor, `docs/` içinde yazılı |
-| 4.9 | **Playwright E2E suite** | `pnpm test:e2e` — 6 senaryo yeşil, CI'da koşuyor. Bu SOW'un "end-to-end demo" kanıtının otomatik hali |
+| 4.1 | Wallet connect (Wallets Kit) | Connect/disconnect with Freighter, address visible. Manual + Playwright (mocked) |
+| 4.2 | Search: `github.com/foo`, `@foo`, `foo/bar`, nick | Playwright: all 4 input formats resolve to the right identity type; invalid input gives a comprehensible error |
+| 4.3 | Profile / payment page (`/pay/github/foo`) | Pending balance, past payments, shareable link. Playwright: the 0-balance and N-balance cases |
+| 4.4 | Send flow | Pick amount + expiry → sign → tx confirmation + explorer link. Playwright against a real tx on testnet |
+| 4.5 | Claim dashboard | Connect GitHub → claimables listed → claim in one click. A real testnet claim |
+| 4.6 | Refund flow | A "take it back" button for a payment past expiry. A real refund on testnet using a short expiry |
+| 4.7 | Tx evidence page | Every demo transaction in one table with explorer links — the one place the judges see it all at a glance |
+| 4.8 | Vercel deploy | Live URL works, written down in `docs/` |
+| 4.9 | **Playwright E2E suite** | `pnpm test:e2e` — 6 scenarios green, running in CI. This is the automated form of the SOW's "end-to-end demo" evidence |
 
 ---
 
-### Faz 5 — Kanıt paketi  *(~3 gün)*
+### Phase 5 — Evidence package  *(~3 days)*
 
-SOW Bölüm 6 tablosuna **birebir** eşlenir. Ambassador lead teknik değil — her satır tek linkle doğrulanabilir olmalı.
+Maps **one-to-one** onto the table in SOW Section 6. The ambassador lead is not technical — every row has to be verifiable with a single link.
 
-| # | Yapılacak | Bitti kabul kriteri |
+| # | To do | Definition of done |
 |---|---|---|
-| 5.1 | `README.md` | Ne, neden, mimari diyagram, kurulum, **güven varsayımları bölümü**, mainnet USDC'ye geçiş notu |
-| 5.2 | `docs/evidence/tx-hashes.md` | Deliverable → tx hash → explorer linki tablosu, her akış için |
-| 5.3 | Ekran görüntüleri | 6 ekranın hepsi, `docs/evidence/screenshots/` |
-| 5.4 | Test log'ları | `cargo test` + `vitest` + `playwright` çıktıları dosyaya, CI run linki |
-| 5.5 | Demo videosu (2-3 dk) | Sesli anlatım: problem → gönder → doğrula → claim → refund. Tek çekim, kesme yok (güven verir) |
-| 5.6 | **SOW evidence checklist'i doldur** | Bölüm 6.1'in her satırı için hangi linkin karşılık geldiğini yazan `docs/SOW-EVIDENCE.md` |
+| 5.1 | `README.md` | What, why, architecture diagram, setup, **trust assumptions section**, note on moving to mainnet USDC |
+| 5.2 | `docs/evidence/tx-hashes.md` | Deliverable → tx hash → explorer link table, for each flow |
+| 5.3 | Screenshots | All 6 screens, in `docs/evidence/screenshots/` |
+| 5.4 | Test logs | `cargo test` + `vitest` + `playwright` output to file, CI run link |
+| 5.5 | Demo video (2-3 min) | Voiced narration: problem → send → verify → claim → refund. One take, no cuts (that builds trust) |
+| 5.6 | **Fill in the SOW evidence checklist** | `docs/SOW-EVIDENCE.md` naming which link corresponds to each row of Section 6.1 |
 
 ---
 
-## 3. Takvim
+## 3. Schedule
 
-| Hafta | Faz | Ana çıktı |
+| Week | Phase | Main output |
 |---|---|---|
-| 1 | Faz 0 + 1 | Repo, araç zinciri kanıtı, `SPEC.md`, wireframe |
-| 2 | Faz 2 | Escrow kontratı, ≥20 test yeşil, testnet deploy + tx hash |
-| 3 | Faz 3 | OAuth + verifier + parity testi + uçtan uca doğrulama tx'i |
-| 4 | Faz 4 + 5 | 6 ekran, Playwright suite, Vercel demo, kanıt paketi, video |
+| 1 | Phase 0 + 1 | Repo, toolchain proof, `SPEC.md`, wireframe |
+| 2 | Phase 2 | Escrow contract, ≥20 tests green, testnet deploy + tx hashes |
+| 3 | Phase 3 | OAuth + verifier + parity test + end-to-end verification tx |
+| 4 | Phase 4 + 5 | 6 screens, Playwright suite, Vercel demo, evidence package, video |
 
-**Kural: kanıt biriktirilir, sonda toplanmaz.** Her fazın sonunda `docs/evidence/` güncellenir. SOW'daki en büyük başarısızlık modu, çalışan kodun kanıtsız kalması.
+**Rule: evidence accumulates, it is not gathered at the end.** `docs/evidence/` is updated at the end of every phase. The biggest failure mode in this SOW is working code left without evidence.
 
 ---
 
-## 4. Riskler ve önlemler
+## 4. Risks and mitigations
 
-| Risk | Önlem |
+| Risk | Mitigation |
 |---|---|
-| Rust/TS `identity_key` uyuşmazlığı | Faz 3.4 parity testi, kapı olarak |
-| Verifier key sızması | Sadece server-side env, CI grep kuralı, README'de açık güven notu |
-| Testnet USDC yok | Kendi SAC'ımız + SEP-41 arayüzü → mainnet'e tek adres değişikliği |
-| X API erişimi | SOW koşullu yazmış; yoksa belgelenip ertelenir, GitHub tam çalışır |
-| Storage TTL / arşivleme | Payment'lar `persistent`, `extend_ttl` çağrıları deposit/claim'de |
-| Scope kayması | Chrome extension / KYC / revenue split **kapsam dışı**, SOW'da yazılı — dokunmuyoruz |
-| Kontrat bakiyesi tutarsızlığı | Faz 2.6 solvency invariant fuzz testi |
+| Rust/TS `identity_key` mismatch | Phase 3.4 parity test, as a gate |
+| Verifier key leak | Server-side env only, CI grep rule, explicit trust note in the README |
+| No USDC on testnet | Our own SAC + the SEP-41 interface → one address change to go to mainnet |
+| X API access | The SOW wrote it as conditional; if unavailable it gets documented and deferred, GitHub works fully |
+| Storage TTL / archival | Payments are `persistent`, with `extend_ttl` calls on deposit/claim |
+| Scope creep | Chrome extension / KYC / revenue split are **out of scope**, written into the SOW — we don't touch them |
+| Contract balance inconsistency | The Phase 2.6 solvency invariant fuzz test |
 
 ---
 
-## 5. Sıradaki hamle
+## 5. Where we are, and the next move
 
-Faz 0'ı hemen başlatmak için gerekenler:
+**Updated 2026-08-21.**
 
-1. **Onay:** Bölüm 1'deki stack kararları ve Bölüm 2'deki `identity_key`/verifier tasarımı tamam mı?
-2. **GitHub:** `paytag` adında public repo açılacak mı, hangi org/hesap altında?
-3. **Takvim:** SOW'da sprint başlangıcı 24.06.2026 yazıyor, bugün 19.08.2026. Chapter lead ile tarih güncellendi mi?
+| Phase | State |
+|---|---|
+| 0 — Skeleton + toolchain proof | ✅ done — throwaway contract deployed and invoked on testnet |
+| 1 — Spec + data model | ✅ done — `docs/SPEC.md`, now at v2 (GitHub + X identities) |
+| 2 — Escrow contract | ✅ done — 50 tests green, `deposit`/`claim`/`refund` proven on testnet, see `docs/evidence/tx-hashes.md` |
+| 3 — GitHub verification + verifier | 🔨 largely implemented, entirely untested — OAuth via Supabase Auth, the `/auth/callback` route, `POST /api/verify/claim-auth`, and the `claim_nonces` table all exist, but no Supabase project and no GitHub OAuth App have been created yet, so none of it has run once. Setup: `docs/SETUP-AUTH.md`. The 3.4 parity gate is now closed (57 tests in `web/`). Still missing: X verification and the recorded end-to-end claim |
+| 4 — Demo UI | 🔨 in progress — search, profile page, send, **claim and refund** all exist. Refund works end to end on testnet today; claim needs the Phase 3 setup in `docs/SETUP-AUTH.md` before it can run at all |
+| 5 — Evidence package | ⏳ accumulating as we go |
+
+**The immediate next move, in this order:**
+
+1. Create the GitHub OAuth App and the Supabase project, and walk `docs/SETUP-AUTH.md` end to
+   end. Everything in Phase 3 is written against an environment that does not exist yet; until
+   it does, "implemented" and "working" are different words.
+2. Run the full claim path on testnet — deposit → sign in → authorization → `claim` — and record
+   the transaction hash in `docs/evidence/tx-hashes.md` (3.9).
+3. Redeploy the contract. `Error::SignatureLifetimeTooLong` (15) was added so that an
+   over-long authorization stops reporting itself as a deposit-window problem; the currently
+   deployed contract predates it. Refresh the addresses in the evidence package when you do.
+
+**Two decisions still open, both from SPEC §7:**
+
+- **Who pays the claim fee?** Today the recipient's own wallet builds, signs and submits the
+  claim, which means they need XLM and, on mainnet, a USDC trustline. That is exactly the person
+  the product promised not to burden. Phase 2 left the door open here: `claim` does not call
+  `recipient.require_auth()`, so any funded account can submit the transaction and fee
+  sponsorship is a configuration decision rather than a contract change. It needs a funded
+  server-side key. See SPEC §7.5.
+- **How is X ownership verified?** Whether "Sign in with X" works on the free tier is unresolved.
+  The schema and the UI already carry both identity kinds, and the signing endpoint refuses any
+  kind but GitHub on purpose; the X path stays visibly disabled until access is settled.

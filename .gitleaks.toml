@@ -1,6 +1,6 @@
-# gitleaks yapılandırması — CI'da TÜM GEÇMİŞİ tarar.
-# scan-secrets.sh sırrın geçmişe girmesini engeller; gitleaks kaçan olmuş mu diye
-# geriye dönük bakar. İkisi birlikte katmanlı savunma oluşturur.
+# gitleaks configuration — in CI it scans the ENTIRE HISTORY.
+# scan-secrets.sh keeps a secret from entering history; gitleaks looks backwards
+# for anything that slipped through. Together they form a layered defence.
 title = "Paytag"
 
 [extend]
@@ -8,46 +8,54 @@ useDefault = true
 
 [[rules]]
 id = "stellar-secret-seed"
-description = "Stellar secret seed (S... 56 karakter)"
+description = "Stellar secret seed (S... 56 characters)"
 regex = '''\bS[A-Z2-7]{55}\b'''
 keywords = ["S"]
 
 [[rules]]
 id = "next-public-secret"
-description = "NEXT_PUBLIC_ öneki ile tanımlanmış sır — client bundle'ına girer"
+description = "Secret defined with the NEXT_PUBLIC_ prefix — it enters the client bundle"
 regex = '''NEXT_PUBLIC_[A-Z0-9_]*(SECRET|PRIVATE|VERIFIER_SEED|SEED|PASSWORD)'''
 keywords = ["NEXT_PUBLIC_"]
 
 [allowlist]
-description = "Public tanımlayıcılar ve şablonlar sır değildir"
+description = "Public identifiers and templates are not secrets"
 paths = [
   '''\.env\.example$''',
   '''scripts/scan-secrets\.sh$''',
-  # test-scan-secrets.sh'in TAMAMI kasten sahte sır içerir (8 engelleme vakası).
-  # scan-secrets.sh bu dosyayı zaten is_excluded() ile atlıyordu; gitleaks
-  # tarafında unutulmuştu ve CI'ı 4 yanlış alarmla kırıyordu.
-  # Bilinçli ödünleşim: bu dosyaya kazara yapıştırılan GERÇEK bir sır iki
-  # tarayıcıdan da kaçar. Dosyanın içine asla gerçek değer yazılmamalı —
-  # sahte Stellar seed'i bu yüzden /dev/urandom'dan üretiliyor.
+  # The WHOLE of test-scan-secrets.sh deliberately contains fake secrets
+  # (8 blocking cases). scan-secrets.sh already skipped this file via
+  # is_excluded(); it had been forgotten on the gitleaks side and was breaking
+  # CI with 4 false alarms.
+  # A conscious trade-off: a REAL secret pasted into this file by accident
+  # escapes both scanners. A real value must never be written inside it —
+  # which is why the fake Stellar seed is generated from /dev/urandom.
   '''scripts/test-scan-secrets\.sh$''',
   '''\.githooks/''',
   '''\.gitleaks\.toml$''',
   '''docs/SECURITY\.md$''',
-  # SPEC.md, Rust ve TypeScript implementasyonlarının aynı sonucu ürettiğini
-  # kanıtlayan test vektörlerini İÇERMEK ZORUNDA (§2.3, §4.2). Bunlar
-  # `identity_key = <64 hane hex>` biçiminde olduğu için gitleaks'in
-  # generic-api-key kuralına takılıyor — desen doğru, yorum yanlış.
+  # SPEC.md MUST CONTAIN the test vectors that prove the Rust and TypeScript
+  # implementations produce the same result (§2.3, §4.2). Because they are
+  # written as `identity_key = <64 hex digits>` they trip gitleaks'
+  # generic-api-key rule — the pattern is right, the interpretation is wrong.
   #
-  # Bu değerler tanım gereği sır olamaz: hepsi herkese açık girdilerin
-  # sha256'sı, ör. sha256(0x00 ‖ "torvalds"). Dünyada herkes yeniden
-  # hesaplayabilir.
+  # These values cannot be secrets by definition: they are all sha256 hashes of
+  # public inputs, e.g. sha256(0x00 ‖ "torvalds"). Anyone in the world can
+  # recompute them.
   #
-  # Koruma tamamen kalkmıyor: scan-secrets.sh bu dosyayı is_excluded()
-  # ile ATLAMIYOR, yani kendi tarayıcımız SPEC.md'yi taramaya devam ediyor.
+  # Protection is not removed entirely: scan-secrets.sh does NOT skip this file
+  # via is_excluded(), so our own scanner keeps scanning SPEC.md.
   '''docs/SPEC\.md$''',
+  # The parity tests exist to pin the SPEC vectors from the TypeScript side, so
+  # they necessarily repeat them: sha256 digests of public inputs, and the
+  # golden signature from SPEC §4.2 made with a seed of 32 0x03 bytes that is
+  # published in the spec on purpose. Same reasoning as SPEC.md above, same
+  # trade-off — our own scanner still reads these files.
+  '''web/lib/identity-key-parity\.test\.ts$''',
+  '''web/lib/claim-signature-parity\.test\.ts$''',
 ]
 regexes = [
-  '''\bG[A-Z2-7]{55}\b''',   # Stellar public key — paylaşılması normal
-  '''\bC[A-Z2-7]{55}\b''',   # Soroban contract id — paylaşılması normal
-  '''\bM[A-Z2-7]{68}\b''',   # muxed account — paylaşılması normal
+  '''\bG[A-Z2-7]{55}\b''',   # Stellar public key — normal to share
+  '''\bC[A-Z2-7]{55}\b''',   # Soroban contract id — normal to share
+  '''\bM[A-Z2-7]{68}\b''',   # muxed account — normal to share
 ]

@@ -1,149 +1,176 @@
-# Paytag — Anahtar ve Sır Yönetimi
+# Paytag — Key and Secret Management
 
-> **Bu repo private başladı ve teslimde PUBLIC olacak.**
-> Git geçmişi geri alınamaz. Bir sır bir kez commit edilirse, sonraki commit'te
-> silinse bile geçmişte kalır ve repo public olduğu an okunabilir hale gelir.
-> Bu dosyadaki kurallar tavsiye değil, kapı.
+> **This repo started private and will be PUBLIC at delivery.**
+> Git history cannot be undone. Once a secret is committed, it stays in history even if
+> the next commit deletes it, and it becomes readable the moment the repo goes public.
+> The rules in this file are not advice, they are a gate.
 
 ---
 
-## 1. Anahtar envanteri — her sır nerede yaşar
+## 1. Key inventory — where every secret lives
 
-| Sır | Ne işe yarar | Nerede yaşar | Repoda? |
+| Secret | What it does | Where it lives | In the repo? |
 |---|---|---|---|
-| `paytag-dev` seed | Testnet deploy ve test işlemleri imzalar | macOS **Keychain** (`stellar keys generate --secure-store`) | ❌ asla |
-| `VERIFIER_SECRET` | Claim yetkilerini ed25519 ile imzalar. **Escrow'un güvenlik kalbi.** | local: `web/.env.local` · prod: Vercel env vars | ❌ asla |
-| Verifier **public** key | Kontratın `init()`'ine verilir, imzayı doğrular | Kontrat storage + `.env.example`'da placeholder | ✅ public key paylaşılabilir |
-| `GITHUB_CLIENT_SECRET` | OAuth token değişimi | local: `web/.env.local` · prod: Vercel env vars | ❌ asla |
-| `DATABASE_URL` | Neon Postgres (parola içerir) | local: `web/.env.local` · prod: Vercel env vars | ❌ asla |
-| `SESSION_SECRET` | Oturum çerezi imzalar | local: `web/.env.local` · prod: Vercel env vars | ❌ asla |
-| Contract ID (`C...`) | Deploy edilen escrow adresi | `docs/evidence/` + `.env` | ✅ public |
-| Stellar public key (`G...`) | Hesap adresleri | Her yerde | ✅ public |
+| `paytag-dev` seed | Signs testnet deploys and test transactions | macOS **Keychain** (`stellar keys generate --secure-store`) | ❌ never |
+| `VERIFIER_SECRET` | Signs claim authorizations with ed25519. **The security heart of the escrow.** | local: `web/.env.local` · prod: Vercel env vars | ❌ never |
+| Verifier **public** key | Passed to the contract's `init()`, verifies the signature | Contract storage + a placeholder in `.env.example` | ✅ a public key can be shared |
+| GitHub OAuth client id + **client secret** | The OAuth code-for-token exchange — performed by **Supabase**, not by this app | Supabase dashboard → Authentication → Providers → GitHub | ❌ never — not in the repo and not in its env either |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Bypasses row level security entirely** — a full-database key. **Server side only.** Its single job is writing the `identities` row after OAuth: the one write a user must never be able to make for themselves, because that row's existence *is* the proof of handle ownership | local: `web/.env.local` · prod: Vercel env vars | ❌ never |
+| Supabase URL + `anon` key | Client access, bounded by the RLS policies in `db/schema.sql` | `NEXT_PUBLIC_` env vars, browser bundle | ✅ public by design |
+| Contract ID (`C...`) | The deployed escrow address | `docs/evidence/` + `.env` | ✅ public |
+| Stellar public key (`G...`) | Account addresses | Everywhere | ✅ public |
 
-**Ayırt edici kural:** `S` ile başlayan 56 karakterlik her Stellar dizesi **secret seed**'dir ve
-repoya asla girmez. `G` (hesap), `C` (kontrat) ve `M` (muxed) ile başlayanlar publictir, serbest.
+**The rule that tells them apart:** every 56-character Stellar string starting with `S` is a
+**secret seed** and never enters the repo. Those starting with `G` (account), `C` (contract) and
+`M` (muxed) are public, use them freely.
+
+Sessions are Supabase's, not ours: there is no hand-rolled session cookie and therefore no
+signing secret for one. `web/middleware.ts` refreshes the Supabase session on navigation, and
+`supabase.auth.getUser()` revalidates the token with Supabase rather than trusting what the
+cookie says.
+
+### 1.1 The auth surface — what is public on purpose
+
+Four variables serve the auth path. Two of them belong in the browser bundle; mistaking either
+of the other two for those is the accident this section exists to prevent.
+
+| Variable | Public? | Why |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | An address, not a permission. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | It carries no privilege of its own; everything it can read or write is whatever the RLS policies in `db/schema.sql` allow — public reads on `identities` and published `cards`, no writes on `identities` at all, nothing at all on `claim_nonces`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | **no** | Bypasses RLS. In the browser it would let anyone write their own identity row, which is the same as letting anyone claim any handle. |
+| `VERIFIER_SECRET` | **no** | See §2. |
+
+The two server-side files that touch those secrets both begin with `import "server-only"` —
+`web/lib/verifier.ts` and `web/lib/supabase/server.ts`. That import is not decoration: if a
+client component ever imports either module, directly or through a chain, **the build fails**
+instead of quietly shipping the secret to a browser. It is a compile-time control, which is the
+kind that cannot be forgotten in review.
 
 ---
 
-## 2. Neden `VERIFIER_SECRET` en kritik sır
+## 2. Why `VERIFIER_SECRET` is the most critical secret
 
-Kontrat GitHub'a HTTP isteği atamaz. Bu yüzden off-chain verifier sahipliği doğrulayıp sonucu
-ed25519 ile imzalar, kontrat da `ed25519_verify` ile bu imzayı doğrular.
+The contract cannot make an HTTP request to GitHub. So the off-chain verifier confirms ownership
+and signs the result with ed25519, and the contract verifies that signature with `ed25519_verify`.
 
-Sonuç: **bu anahtar ele geçerse, saldırgan escrow'daki herhangi bir ödeme için geçerli claim
-yetkisi üretip fonları kendi cüzdanına çekebilir.** Kontratta başka bir kapı yok.
+The consequence: **if this key is compromised, an attacker can mint a valid claim authorization
+for any payment in escrow and pull the funds into their own wallet.** There is no other gate in
+the contract.
 
-Bu yüzden:
+Which is why:
 
-- Anahtar **yalnızca** sunucu tarafı kodda okunur (Next.js route handler / server action)
-- `NEXT_PUBLIC_` öneki **asla** verilmez — o önek değişkeni tarayıcı bundle'ına gömer
-- Client component'lerden import edilen hiçbir modül bu değişkene dokunmaz
-- Rotasyon yolu var: kontratın `set_verifier(new_pubkey)` fonksiyonu admin'e açık
+- The key is read **only** in server-side code (Next.js route handler / server action)
+- It is **never** given the `NEXT_PUBLIC_` prefix — that prefix bakes the variable into the browser bundle
+- No module imported from a client component touches this variable
+- There is a rotation path: the contract's `set_verifier(new_pubkey)` function is open to the admin
 
 ---
 
-## 3. Katmanlı savunma — 4 katman
+## 3. Layered defense — 4 layers
 
-Tek bir kontrole güvenmiyoruz. Sırayla:
+We don't trust a single control. In order:
 
-### Katman 1 — `.gitignore`
-`.env*` (sadece `.example` hariç), `*.pem`, `*.key`, `.stellar/`, `secrets/` ve arkadaşları.
-Kazara `git add .` yapmaya karşı ilk bariyer.
+### Layer 1 — `.gitignore`
+`.env*` (all but `.example`), `*.pem`, `*.key`, `.stellar/`, `secrets/` and friends.
+The first barrier against an accidental `git add .`.
 
-### Katman 2 — `pre-commit` hook (en önemli katman)
+### Layer 2 — `pre-commit` hook (the most important layer)
 `.githooks/pre-commit` → `scripts/scan-secrets.sh --staged`
 
-Commit **oluşmadan** staged içeriği tarar ve bulursa commit'i reddeder. Bu katman kritik
-çünkü sırrın geçmişe *girmesini* engelliyor — sonradan temizlemek çok daha zordur.
+Scans the staged content **before the commit exists** and rejects the commit if it finds
+anything. This layer is critical because it stops the secret from *entering* history at all —
+cleaning it up afterwards is far harder.
 
-Kurulum (bir kez, `scripts/setup-mac.sh` otomatik yapar):
+Setup (once; `scripts/setup-mac.sh` does it automatically):
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-Neyi yakalar:
+What it catches:
 
-| Desen | Örnek |
+| Pattern | Example |
 |---|---|
-| Stellar secret seed | `S` + 55 base32 karakter |
-| PEM private key bloğu | `-----BEGIN ... PRIVATE KEY-----` |
+| Stellar secret seed | `S` + 55 base32 characters |
+| PEM private key block | `-----BEGIN ... PRIVATE KEY-----` |
 | GitHub token | `ghp_…`, `gho_…`, `github_pat_…` |
-| Sır isimli değişkene gerçek değer | `VERIFIER_SECRET="A9x…"` |
-| Postgres URL'inde parola | `postgres://user:realpass@host` |
-| `NEXT_PUBLIC_` ile sır | `NEXT_PUBLIC_VERIFIER_SECRET` |
-| `.env` dosyasının kendisi | `.env`, `.env.local`, `.env.production` |
-| Stellar identity dosyası | `.stellar/identity/*.toml` |
+| A real value on a secret-named variable | `VERIFIER_SECRET="A9x…"` |
+| Password in a Postgres URL | `postgres://user:realpass@host` |
+| A secret with `NEXT_PUBLIC_` | `NEXT_PUBLIC_VERIFIER_SECRET` |
+| The `.env` file itself | `.env`, `.env.local`, `.env.production` |
+| Stellar identity file | `.stellar/identity/*.toml` |
 
-Placeholder'lar (`your-…`, `xxx…`, `process.env.…`, `<…>`) alarm vermez — kontrol satırın
-tamamına değil **atanan değere** uygulanır, yani `DB_PASSWORD=gercekSir123` yakalanır ama
-`DB_PASSWORD=your-password` yakalanmaz.
+Placeholders (`your-…`, `xxx…`, `process.env.…`, `<…>`) don't raise an alarm — the check applies
+to the **assigned value**, not the whole line, so `DB_PASSWORD=realSecret123` is caught but
+`DB_PASSWORD=your-password` is not.
 
-Yanlış alarm olduğuna eminsen satır sonuna `# paytag-allow-secret` ekle. Bunu kullanırken
-iki kez düşün — muafiyet code review'da görünür olsun diye bilinçli olarak gürültülü.
+If you're certain it's a false positive, add `# paytag-allow-secret` at the end of the line.
+Think twice before using it — the exemption is deliberately noisy so it shows up in code review.
 
-### Katman 3 — `pre-push` hook
-Biri `git commit --no-verify` ile Katman 2'yi atlarsa, push öncesi tüm takip edilen dosyalar
-yeniden taranır. Son yerel savunma hattı.
+### Layer 3 — `pre-push` hook
+If someone skips Layer 2 with `git commit --no-verify`, every tracked file is re-scanned before
+the push. The last local line of defense.
 
-### Katman 4 — CI (`gitleaks`, tüm geçmiş)
-GitHub Actions her push'ta `gitleaks` ile **tüm commit geçmişini** tarar. Bu katman geriye
-dönük bakar: yerel hook'lar kurulmadan atılmış eski bir commit'te sır varsa burada çıkar.
+### Layer 4 — CI (`gitleaks`, entire history)
+On every push, GitHub Actions scans **the whole commit history** with `gitleaks`. This layer
+looks backwards: if an old commit made before the local hooks were installed contains a secret,
+it surfaces here.
 
 ---
 
-## 4. Anahtar üretimi — doğru yol
+## 4. Key generation — the right way
 
-### Testnet deploy anahtarı
+### Testnet deploy key
 
 ```bash
-# macOS Keychain'de saklanır, diske plaintext yazılmaz
+# Stored in the macOS Keychain, never written to disk in plaintext
 stellar keys generate paytag-dev --network testnet --fund --secure-store
-stellar keys address paytag-dev     # sadece PUBLIC adresi yazdırır
+stellar keys address paytag-dev     # prints only the PUBLIC address
 ```
 
-`stellar keys show` komutunu **asla** terminal geçmişine veya ekran görüntüsüne düşürme.
-Demo videosu çekerken bu komutu çalıştırmadığından emin ol.
+**Never** let `stellar keys show` land in your terminal history or a screenshot.
+When recording the demo video, make sure you don't run that command.
 
-### Verifier anahtarı
+### Verifier key
 
 ```bash
-cd web && pnpm run verifier:keygen
+node scripts/paytag.mjs keygen      # from the repo root
 ```
 
-Bu script secret'ı **stdout'a yazmaz**; doğrudan `web/.env.local`'a ekler ve sadece public
-key'i ekrana basar. Public key'i kontratın `init()`'ine verirsin.
+This script **does not write the secret to stdout**; it appends it straight to
+`web/.env.local` and prints only the public key. You pass the public key to the contract's `init()`.
 
 ---
 
-## 5. Public'e çıkmadan önce — zorunlu kontrol listesi
+## 5. Before going public — mandatory checklist
 
-Repo'yu public yapmadan önce, sırayla:
+Before making the repo public, in order:
 
-- [ ] `scripts/scan-secrets.sh --tree` → temiz
-- [ ] `gitleaks detect --source . --config .gitleaks.toml --log-opts="--all"` → **tüm geçmişte** 0 bulgu
-- [ ] `git log --all --diff-filter=A --name-only | sort -u | grep -E '\.env|\.pem|\.key|\.stellar'` → boş
+- [ ] `scripts/scan-secrets.sh --tree` → clean
+- [ ] `gitleaks detect --source . --config .gitleaks.toml --log-opts="--all"` → 0 findings **across the entire history**
+- [ ] `git log --all --diff-filter=A --name-only | sort -u | grep -E '\.env|\.pem|\.key|\.stellar'` → empty
 - [ ] `git log -p --all | grep -cE '\bS[A-Z2-7]{55}\b'` → `0`
-- [ ] Vercel'deki env değişkenleri repoda değil, sadece Vercel'de
-- [ ] Ekran görüntülerinde secret key, `.env` içeriği veya terminal geçmişi görünmüyor
-- [ ] Demo videosunda `stellar keys show` çıktısı veya `.env.local` içeriği görünmüyor
-- [ ] GitHub OAuth App'in callback URL'i production domain'ine ayarlı
-- [ ] GitHub repo ayarlarında **Secret scanning** + **Push protection** açık (public repo'larda ücretsiz)
+- [ ] The env variables in Vercel are not in the repo, only in Vercel
+- [ ] No secret key, `.env` contents, or terminal history visible in any screenshot
+- [ ] No `stellar keys show` output or `.env.local` contents visible in the demo video
+- [ ] Supabase's redirect allow-list contains the production URL (the OAuth App's own callback points at Supabase, not at us)
+- [ ] **Secret scanning** + **Push protection** enabled in the GitHub repo settings (free on public repos)
 
-**Eğer geçmişte bir sır bulunursa:** commit'i silmek yetmez. Doğru yol:
+**If a secret is found in history:** deleting the commit is not enough. The right way:
 
-1. Sırrı **hemen rotasyona sok** — sızmış anahtar ölü anahtardır, temizlik ikincil
-   (verifier için: yeni anahtar üret → `set_verifier` çağır)
-2. Sonra geçmişi temizle: `git filter-repo --invert-paths --path <dosya>` veya
-   temiz bir başlangıç commit'i ile repoyu yeniden kur
-3. Public'e çıkmayı 1. adım bitene kadar erteleme yok — rotasyon yapılmadan public olma
+1. **Rotate the secret immediately** — a leaked key is a dead key, cleanup is secondary
+   (for the verifier: generate a new key → call `set_verifier`)
+2. Then clean the history: `git filter-repo --invert-paths --path <file>` or rebuild the
+   repo from a clean initial commit
+3. Going public does not get deferred past step 1 — never go public without rotating
 
-Sıralama önemli: sızmış anahtarı iptal etmek geçmişi temizlemekten daha aciltir, çünkü
-private repo'ya erişimi olan biri anahtarı zaten kopyalamış olabilir.
+The order matters: revoking a leaked key is more urgent than scrubbing history, because someone
+with access to the private repo may already have copied the key.
 
 ---
 
-## 6. Zafiyet bildirimi
+## 6. Vulnerability reporting
 
-Bu bir MVP ve hibe teslimidir, mainnet fonu tutmuyor. Bir güvenlik sorunu bulursan issue
-açmak yerine doğrudan yaz: mete@bronixengineering.com
+This is an MVP and a grant deliverable; it holds no mainnet funds. If you find a security
+problem, write directly instead of opening an issue: mete@bronixengineering.com

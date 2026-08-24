@@ -9,4 +9,4 @@ pnpm:     10.11.0
 gitleaks: 8.30.1
 
 identity: paytag-dev (public) = GAD3LMKOEUQ4PVF42NGCDVYZVMLZDAP4RNRRNWEZ7Y7CCXHB7MNQCKWG
-          secret -> macOS Keychain, repoda ve diskte plaintext yok
+          secret -> macOS Keychain, no plaintext in the repo or on disk

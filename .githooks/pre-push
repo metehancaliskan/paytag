@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Paytag pre-push — push'tan önce takip edilen TÜM dosyaları tarar.
-# pre-commit atlanmış (--no-verify) bir commit varsa son savunma hattı.
+# Paytag pre-push — scans EVERY tracked file before a push.
+# Last line of defence if a commit skipped pre-commit (--no-verify).
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 exec "$ROOT/scripts/scan-secrets.sh" --tree

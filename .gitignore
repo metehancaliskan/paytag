@@ -1,9 +1,9 @@
 # ==========================================================================
-# BU REPO TESLİMDE PUBLIC OLACAK. Sır içeren hiçbir şey buraya girmemeli.
-# Git geçmişi geri alınamaz: bir kez commit edilen sır sonsuza kadar kalır.
+# THIS REPO GOES PUBLIC AT DELIVERY. Nothing containing a secret belongs here.
+# Git history cannot be undone: a secret committed once stays there forever.
 # ==========================================================================
 
-# --- Sırlar ---------------------------------------------------------------
+# --- Secrets --------------------------------------------------------------
 .env
 .env.*
 !.env.example
@@ -20,7 +20,7 @@ verifier-secret*
 *-secret.json
 *-seed.txt
 
-# --- Stellar CLI: identity dosyaları seed phrase içerir -------------------
+# --- Stellar CLI: identity files contain a seed phrase --------------------
 .stellar/
 .soroban/
 .config/stellar/
@@ -48,8 +48,8 @@ coverage/
 .vscode/
 *.swp
 
-# --- Yerel geçici ---------------------------------------------------------
+# --- Local scratch --------------------------------------------------------
 _to_delete/
 
-# sır tarayıcı test artifact
+# secret scanner test artifact
 .scan-test-tmp/

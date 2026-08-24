@@ -5,7 +5,7 @@ on:
     branches: [develop, main]
   pull_request:
 
-# Bu repo teslimde PUBLIC olacak. Hiçbir adımın repoya yazması gerekmiyor.
+# This repo will be PUBLIC on delivery. No step needs write access to it.
 permissions:
   contents: read
 
@@ -45,24 +45,73 @@ jobs:
       - name: Wasm size report
         run: ls -l target/wasm32v1-none/release/*.wasm
 
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The Phase 3.4 gate. If the TypeScript identity_key ever stops matching
+      # the Rust one, every claim silently looks under the wrong tag — so this
+      # runs before anything else and its failure fails the build.
+      - name: Parity and unit tests
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # `lib/config.ts` throws on a missing variable by design, so the build
+      # needs the public ones. No secret is used or needed here: nothing in a
+      # production build reads VERIFIER_SECRET or the service role key.
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+          NEXT_PUBLIC_STELLAR_RPC_URL: https://soroban-testnet.stellar.org
+          NEXT_PUBLIC_ESCROW_CONTRACT_ID: CDN2BQNGHWCC22IXLAKBAVIOL5ID4MTH4FNYISVEARWQ4HZ27ZA7OZ3B
+          NEXT_PUBLIC_USDC_SAC_ID: CBU7HRUSXSVPI7QHA73G67UDRQTKSEOICFHWOMWSPOZ2S3R3DIWUCPKI
+
+      - name: The verifier CLI agrees with the spec
+        working-directory: .
+        run: node scripts/paytag.mjs selftest
+
   secrets:
-    name: Sır sızıntısı taraması
+    name: Secret leak scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Tarayıcının kendi testi
+      - name: The scanner's own test suite
         run: ./scripts/test-scan-secrets.sh
 
-      - name: Kendi tarayıcımız (takip edilen tüm dosyalar)
+      - name: Our own scanner (every tracked file)
         run: ./scripts/scan-secrets.sh --tree
 
-      # gitleaks Action SARMALAYICISI org hesaplarından ücret ister ve
-      # lisanssız hiç taramaz. gitleaks'in KENDİSİ MIT ve ücretsiz.
-      # İkiliyi sürüm sabitleyip SHA256 doğrulayarak kuruyoruz.
-      - name: gitleaks kur (MIT ikili)
+      # The gitleaks Action WRAPPER charges org accounts and scans nothing
+      # without a licence. gitleaks ITSELF is MIT and free.
+      # We install the binary with a pinned version and a verified SHA256.
+      - name: Install gitleaks (MIT binary)
         env:
           GITLEAKS_VERSION: 8.30.1
         run: |
@@ -77,9 +126,10 @@ jobs:
           sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
           gitleaks version
 
-      # --redact ZORUNLU: repo public olunca Actions logları da public olur.
-      # Redact yoksa bulunan sır, sızıntıyı bildiren log satırına basılır.
-      - name: gitleaks — TÜM COMMIT GEÇMİŞİ
+      # --redact is MANDATORY: once the repo is public, the Actions logs are
+      # public too. Without redaction the secret that was found gets printed
+      # into the very log line that reports the leak.
+      - name: gitleaks — ENTIRE COMMIT HISTORY
         run: |
           gitleaks git . \
             --config .gitleaks.toml \
@@ -88,11 +138,11 @@ jobs:
             --verbose \
             --exit-code 1
 
-      - name: .env sızıntısı geçmişte var mı
+      - name: Check history for a .env leak
         run: |
           if git log --all --diff-filter=A --name-only --pretty=format: \
              | sort -u | grep -vE '\.example$' | grep -E '(^|/)\.env|\.pem$|\.key$|\.stellar/' ; then
-            echo "::error::Yukarıdaki dosyalar geçmişte bir noktada eklenmiş. docs/SECURITY.md bölüm 5'i uygula."
+            echo "::error::The files above were added at some point in history. Apply docs/SECURITY.md section 5."
             exit 1
           fi
-          echo "Geçmiş temiz."
+          echo "History is clean."

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Paytag pre-commit — sır sızıntısını commit ANINDA durdurur.
-# Kurulum: git config core.hooksPath .githooks   (scripts/setup-mac.sh yapar)
+# Paytag pre-commit — stops a secret leak AT COMMIT TIME.
+# Install: git config core.hooksPath .githooks   (scripts/setup-mac.sh does this)
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 exec "$ROOT/scripts/scan-secrets.sh" --staged
