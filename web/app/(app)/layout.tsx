@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import WalletBar from "@/components/WalletBar";
+import Logo from "@/components/Logo";
 import { NETWORK } from "@/lib/config";
 
 /**
@@ -24,9 +25,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
           <Link href="/app" className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-base font-black text-accent-fg">
-              Pt
-            </span>
+            <Logo size={30} />
             <span className="text-lg font-bold tracking-tight">Paytag</span>
             <span className="badge">{NETWORK}</span>
           </Link>

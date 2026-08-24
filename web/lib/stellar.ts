@@ -107,6 +107,30 @@ function whoThrew(text: string): "escrow" | "token" | "unknown" {
 }
 
 /**
+ * Does this account exist on chain yet?
+ *
+ * Three answers, not two: `null` means "could not tell" — the RPC was
+ * unreachable — and a caller must not treat that as "no". A payout address is
+ * saved on `null` and refused only on a definite `false`, because an outage in
+ * our own infrastructure is no reason to reject a wallet a person owns.
+ *
+ * It matters at all because a Stellar payment to an unfunded account fails: an
+ * address saved today with nothing in it turns into a claim transaction that
+ * reverts, after the reader has already signed it.
+ */
+export async function accountExists(
+  address: string,
+): Promise<boolean | null> {
+  try {
+    await server().getAccount(address);
+    return true;
+  } catch (e) {
+    const text = errorText(e);
+    return /not found|404|NotFound/i.test(text) ? false : null;
+  }
+}
+
+/**
  * Turns anything thrown by a contract call into a sentence a person can act
  * on. Falls back to the raw message rather than swallowing it: an unknown
  * failure that prints nothing is worse than one that prints too much.

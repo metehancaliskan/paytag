@@ -55,16 +55,9 @@ export default function YouStrip() {
     return <div className="skeleton h-16 w-full" />;
   }
 
-  if (identity.status === "anon") {
-    return (
-      <Row
-        title="Get paid for what you already do"
-        body="Developers and amplifiers: verify a GitHub or X handle, fill one short form."
-        cta="Submit yourself"
-        href="/app/submit"
-      />
-    );
-  }
+  // Nothing to say to a stranger here: the "+" tile at the head of the list is
+  // the invitation, and repeating it in a banner is two asks for one action.
+  if (identity.status === "anon") return null;
 
   if (listed === true) {
     return (
@@ -74,8 +67,8 @@ export default function YouStrip() {
             <CheckMark size={14} />
           </span>
         }
-        title={`You are listed as @${handle}`}
-        body="People can find you here and pay your handle."
+        title={`Listed as @${handle}`}
+        body=""
         cta="Edit your card"
         quiet
         href="/app/submit"
@@ -95,8 +88,8 @@ export default function YouStrip() {
           <GithubMark size={16} />
         </span>
       }
-      title={`@${handle} is verified`}
-      body="You are not in the list yet — two fields and a role away."
+      title={`@${handle} verified`}
+      body="Not in the list yet."
       cta="Submit yourself"
       href="/app/submit"
     />
@@ -125,7 +118,7 @@ function Row({
       {icon}
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{title}</p>
-        <p className="text-sm text-mute">{body}</p>
+        {body && <p className="text-sm text-mute">{body}</p>}
       </div>
       {extra}
       <Link className={`btn ${quiet ? "btn-ghost" : "btn-primary"}`} href={href}>

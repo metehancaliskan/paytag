@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import { ROLE_LIST } from "@/lib/roles";
 
 /**
@@ -34,9 +35,7 @@ export default function Landing() {
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-5 py-4">
           <span className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-base font-black text-accent-fg">
-              Pt
-            </span>
+            <Logo size={30} />
             <span className="text-lg font-bold tracking-tight">Paytag</span>
           </span>
 

@@ -294,6 +294,18 @@ body {
     background: var(--accent-hover);
   }
 
+  /* The only filled red in the product, and it belongs to exactly one action:
+     deleting your own account. Anything else that fills with --danger teaches
+     the reader to stop reading it. */
+  .btn-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
   .btn-ghost {
     border: 1px solid var(--line-strong);
     background: transparent;

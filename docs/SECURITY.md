@@ -37,7 +37,7 @@ of the other two for those is the accident this section exists to prevent.
 | Variable | Public? | Why |
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | An address, not a permission. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | It carries no privilege of its own; everything it can read or write is whatever the RLS policies in `db/schema.sql` allow — public reads on `identities` and published `cards`, no writes on `identities` at all, nothing at all on `claim_nonces`. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | It carries no privilege of its own; everything it can read or write is whatever the RLS policies in `db/schema.sql` allow — public reads on `identities` and published `cards`, your own rows only on `payout_prefs`, no writes on `identities` at all, nothing at all on `claim_nonces`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **no** | Bypasses RLS. In the browser it would let anyone write their own identity row, which is the same as letting anyone claim any handle. |
 | `VERIFIER_SECRET` | **no** | See §2. |
 
@@ -170,7 +170,28 @@ with access to the private repo may already have copied the key.
 
 ---
 
-## 6. Vulnerability reporting
+## 6. What a deleted account removes, and what it cannot
+
+`POST /api/account/delete` removes the Supabase Auth user and, by cascade, the
+profile, the identities, the cards and the payout addresses. It is confirmed by
+typing the handle, and it is the only route in the product that deletes
+somebody's data on purpose.
+
+Three things it does not touch, listed here because a privacy claim that
+overstates itself is worse than none:
+
+| Not removed | Where it lives | Why it cannot go |
+|---|---|---|
+| Money in escrow, and every deposit and claim that ever happened | The Soroban contract and the ledger | Public, immutable, and bound to `sha256(kind ‖ handle)` rather than to the account. Verifying the same handle again makes the same escrow claimable again — which is the property that makes deletion safe rather than a way to lose money. |
+| The row in `claim_nonces` | Postgres, with `profile_id` set to NULL | It is the guarantee that the verifier signs a nonce at most once, and the only trace an incident could be reconstructed from. Its remaining contents — an identity key and a public address — are already in the claim transaction on chain. |
+| The provider's own authorization record | GitHub / X | Ours to read, not ours to revoke. The next sign-in may skip the consent screen; that is done in the provider's settings. |
+
+The one claim this product does make: nothing off chain is load-bearing. Deleting
+an account, or the whole database, cannot move or destroy a cent of escrow.
+
+---
+
+## 7. Vulnerability reporting
 
 This is an MVP and a grant deliverable; it holds no mainnet funds. If you find a security
 problem, write directly instead of opening an issue: mete@bronixengineering.com

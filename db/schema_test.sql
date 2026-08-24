@@ -2,11 +2,12 @@
 -- Paytag — schema behaviour test
 --
 -- Shows not merely that schema.sql "works", but that IT REJECTS THE RIGHT
--- THINGS. Six negative cases, each one corresponding to an attack scenario.
+-- THINGS. Nine negative cases, each one corresponding to an attack scenario,
+-- plus one retention case that has to keep something rather than refuse it.
 -- The whole thing ends in `rollback`; it never touches production data.
 --
 -- Running it, either way — plain SQL only, no psql meta-commands:
---   Supabase:  SQL Editor -> paste -> Run. A green "All six rejection cases
+--   Supabase:  SQL Editor -> paste -> Run. A green "All nine rejection cases
 --              passed" row means every case behaved.
 --   Local:     psql -f db/schema.sql && psql -f db/schema_test.sql
 --
@@ -32,8 +33,8 @@ do $$
 begin
   -- 1. Hanging a card on somebody else's identity
   begin
-    insert into public.cards (identity_id, profile_id, headline, summary)
-    values ('aaaaaaaa-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222','Takeover attempt','This card is being hung on somebody else''s identity.');
+    insert into public.cards (identity_id, profile_id, role, headline, summary)
+    values ('aaaaaaaa-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222','dev','Takeover attempt','This card is being hung on somebody else''s identity.');
     raise exception 'FAILED: a card could be hung on somebody else''s identity';
   exception when others then
     if sqlerrm like 'FAILED%' then raise; end if;
@@ -62,8 +63,8 @@ begin
 
   -- 4. A card for a non-existent identity (a card without verification)
   begin
-    insert into public.cards (identity_id, profile_id, headline, summary)
-    values (gen_random_uuid(),'11111111-1111-1111-1111-111111111111','Imaginary','An attempt to write a card for an unverified identity.');
+    insert into public.cards (identity_id, profile_id, role, headline, summary)
+    values (gen_random_uuid(),'11111111-1111-1111-1111-111111111111','dev','Imaginary','An attempt to write a card for an unverified identity.');
     raise exception 'FAILED: a card was written for an unverified identity';
   exception when others then
     if sqlerrm like 'FAILED%' then raise; end if;
@@ -89,12 +90,89 @@ begin
     if sqlerrm like 'FAILED%' then raise; end if;
     raise notice '✅ a non-normalized handle was rejected';
   end;
+
+  -- 7. A payout address on somebody else's identity.
+  --    The expensive one: if this got through, the verifier would sign that
+  --    person's escrow over to this wallet.
+  begin
+    insert into public.payout_prefs (identity_id, profile_id, address)
+    values ('aaaaaaaa-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222',
+            'GDIPFNUNDF4COU5J3PJ7MKRXXSDFZ3EEDAVX34U2GDHXTPNNG4L76LPV');
+    raise exception 'FAILED: a payout address was bound to somebody else''s identity';
+  exception when others then
+    if sqlerrm like 'FAILED%' then raise; end if;
+    raise notice '✅ a payout address could not be bound to somebody else''s identity';
+  end;
+
+  -- 8. A malformed payout address. Lowercase is not strkey, and an address
+  --    that cannot exist would send a claim into a transaction that fails.
+  begin
+    insert into public.payout_prefs (identity_id, profile_id, address)
+    values ('aaaaaaaa-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111',
+            'gdipfnundf4cou5j3pj7mkrxxsdfz3eedavx34u2gdhxtpnng4l76lpv');
+    raise exception 'FAILED: a malformed payout address was accepted';
+  exception when others then
+    if sqlerrm like 'FAILED%' then raise; end if;
+    raise notice '✅ a malformed payout address was rejected';
+  end;
+
+  -- 9. Two payout addresses for one identity. The second must replace the
+  --    first, never sit beside it — two destinations for one escrow is a
+  --    question nobody can answer.
+  begin
+    insert into public.payout_prefs (identity_id, profile_id, address) values
+      ('aaaaaaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',
+       'GDIPFNUNDF4COU5J3PJ7MKRXXSDFZ3EEDAVX34U2GDHXTPNNG4L76LPV'),
+      ('aaaaaaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',
+       'GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H');
+    raise exception 'FAILED: one identity took two payout addresses';
+  exception when others then
+    if sqlerrm like 'FAILED%' then raise; end if;
+    raise notice '✅ one identity could not take two payout addresses';
+  end;
+end $$;
+
+-- Retention, not rejection: deleting an account must NOT take the record of
+-- the claim authorizations signed for it. That record is what guarantees the
+-- verifier signs a nonce at most once, and it is the only trace an incident
+-- could be reconstructed from.
+do $$
+declare
+  left_behind integer;
+  orphaned    integer;
+begin
+  insert into public.claim_nonces (nonce, profile_id, identity_key, recipient, expires_at_ledger)
+  values (repeat('ab', 32), '22222222-2222-2222-2222-222222222222',
+          '9d8638cdf5594ee5a5178e3d413fb8206513356b947de1de600f178532c7060b',
+          'GDIPFNUNDF4COU5J3PJ7MKRXXSDFZ3EEDAVX34U2GDHXTPNNG4L76LPV', 42);
+
+  delete from public.profiles where id = '22222222-2222-2222-2222-222222222222';
+
+  select count(*) into left_behind
+  from public.claim_nonces where nonce = repeat('ab', 32);
+  if left_behind <> 1 then
+    raise exception 'FAILED: deleting the account took the nonce record with it';
+  end if;
+
+  select count(*) into orphaned
+  from public.claim_nonces where nonce = repeat('ab', 32) and profile_id is null;
+  if orphaned <> 1 then
+    raise exception 'FAILED: the nonce record still points at a deleted profile';
+  end if;
+
+  -- And the account itself really is gone, cards and identities included.
+  if exists (select 1 from public.identities
+             where profile_id = '22222222-2222-2222-2222-222222222222') then
+    raise exception 'FAILED: identities survived the account deletion';
+  end if;
+
+  raise notice '✅ deleting an account frees the handle and keeps the nonce record (profile_id null)';
 end $$;
 
 -- Happy path: two identities of the same person, two cards
-insert into public.cards (identity_id, profile_id, headline, summary, ecosystems, published) values
-  ('aaaaaaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','Soroban contracts','I write escrow contracts on Stellar, in Rust and TypeScript.', array['stellar','soroban'], true),
-  ('aaaaaaaa-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','Ecosystem content','I produce Turkish-language content about the Stellar ecosystem and organize events.', array['stellar'], true);
+insert into public.cards (identity_id, profile_id, role, headline, summary, ecosystems, published) values
+  ('aaaaaaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','dev','Soroban contracts','I write escrow contracts on Stellar, in Rust and TypeScript.', array['stellar','soroban'], true),
+  ('aaaaaaaa-0000-0000-0000-000000000002','11111111-1111-1111-1111-111111111111','shiller','Ecosystem content','I produce Turkish-language content about the Stellar ecosystem and organize events.', array['stellar'], true);
 
 do $$ begin raise notice '=== the public_cards view ==='; end $$;
 select kind, handle, headline, linked_identities from public.public_cards order by kind;
@@ -104,4 +182,4 @@ rollback;
 -- Nothing above this line survived the rollback. This last row exists so the
 -- run has a visible verdict: any failed case raises an exception and aborts the
 -- script, so reaching this statement at all is the pass condition.
-select 'All six rejection cases passed. Nothing was left behind.' as result;
+select 'All nine rejection cases passed. Nothing was left behind.' as result;

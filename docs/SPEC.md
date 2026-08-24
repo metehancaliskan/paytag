@@ -756,3 +756,88 @@ The dashboard at `/app` opens with one row about the reader (`YouStrip`) in one
 of three states — not connected, verified but unlisted, listed — each with a
 single action, then the handle search, then the list. The proportion is
 deliberate: one row about you, the rest of the page about everyone else.
+
+---
+
+## 9. The account: where it pays, and how to leave
+
+Two capabilities that belong together, because both answer the same question —
+*how much of this is actually mine?*
+
+### 9.1 The payout address (`payout_prefs`)
+
+Until Phase 2.4 a claim paid whichever wallet happened to be connected in the
+browser at that moment. That is not wrong, it is just the only option, and it
+carries a weakness that has nothing to do with cryptography: whoever holds the
+session decides the destination.
+
+So the destination becomes something declared in advance.
+
+```
+payout_prefs(identity_id pk, profile_id, address, …)
+   address ~ '^G[A-Z2-7]{55}$'          shape, in the database
+   StrKey.isValidEd25519PublicKey()     checksum, in lib/payout.ts
+```
+
+Three properties, each one deliberate:
+
+1. **One address per identity, not per account.** The GitHub escrow and the X
+   escrow are separate pools (§8.1); nothing sums them, and nothing forces them
+   into one wallet either.
+2. **Enforced, not suggested.** `POST /api/verify/claim-auth` reads the row with
+   the service role and refuses to sign for any other recipient. A stolen
+   session cannot redirect the money, because the address was chosen before the
+   thief arrived and cannot be changed from the claim path.
+3. **Its own table, and that is the point.** Row level security grants
+   privileges per row, not per column. An UPDATE policy on `identities` — the
+   obvious way to add a column there — would have let a user rewrite their own
+   `handle`, which is the one field the entire verification chain rests on.
+   `identities` stays writable by the service role alone.
+
+Empty is a legitimate state, not an unfinished one: it means "pay the wallet I
+connect", which is what most people want. `claimDestination()` in
+`lib/payout.ts` is the single place that resolves saved-or-connected, and both
+the claim screen and the verifier endpoint call it, so the address shown is
+always the address signed for.
+
+What makes any of this possible is a property of the contract:
+`claim` does not call `recipient.require_auth()` (§7.5). The recipient is pinned
+inside the signed preimage, but *submitting* the transaction is open to any
+funded account — so a hot wallet can pay the fee for a claim that lands in a
+cold one.
+
+Refused at save time: a definite "no such account" from the RPC — a Stellar
+payment to an unfunded account fails, and an address saved today would become a
+claim that reverts after the reader has already signed it. An RPC we cannot
+reach is **not** a refusal (`accountExists()` returns `null`): an outage in our
+own infrastructure is no reason to reject a wallet somebody owns.
+
+### 9.2 Deleting the account
+
+`POST /api/account/delete`, confirmed by typing the handle. An account you
+cannot leave is not an account.
+
+What goes: the Supabase Auth user, and by the cascades in `db/schema.sql` the
+profile, the identities, the cards and the payout addresses. The handle is
+released — the `unique (kind, handle)` constraint means it was held, and after
+deletion anyone can verify it.
+
+What stays, and why:
+
+| Survives | Because |
+|---|---|
+| Money in escrow | It is bound to `sha256(kind ‖ handle)` on chain, not to this account. Verify the same handle again and the same escrow is claimable again. |
+| `claim_nonces` rows | That table is what guarantees the verifier signs a nonce at most once, and it is the only trace an incident could be reconstructed from. `profile_id` becomes NULL (`migration-002`) instead of the row disappearing. What is left in it — an identity key and a public address — is in the claim transaction on chain anyway. |
+| The provider's own record | GitHub and X keep their record that you authorized this app; the next sign-in may skip the consent screen. Revoking that is done on their side, and the interface does not pretend otherwise. |
+
+That first row is what makes deletion safe to offer at all, and it is the
+sentence the confirmation panel leads with. People read "delete my account" as
+"lose my money"; here it is the opposite, and saying so plainly is what makes
+the button pressable.
+
+Two failure modes are handled rather than assumed away. If deleting the auth
+user fails because a cascade is missing on that project, the public rows are
+cleared and the delete is retried once — a half-deleted account that can still
+sign in is worse than either outcome. And the session cookies are removed by
+hand after `signOut()`, because a `signOut` whose user no longer exists can fail
+and leave the browser holding a token that makes the app look signed in.

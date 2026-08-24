@@ -74,14 +74,20 @@ Generate a client secret and keep the tab open.
 Then, in order:
 
 **a. Run the schema.** SQL Editor → paste `db/schema.sql` → Run. It creates
-`profiles`, `identities`, `cards`, `claim_nonces`, their row level security
-policies, and the `public_cards` view. Running it twice is safe — every
-statement is `if not exists` or `create or replace`.
+`profiles`, `identities`, `cards`, `payout_prefs`, `claim_nonces`, their row
+level security policies, and the `public_cards` view. Running it twice is safe —
+every statement is `if not exists` or `create or replace`.
+
+`schema.sql` is always the *current* schema, so a new project needs nothing
+else. The `migration-*.sql` files are for a deployment that already ran an older
+version of it; if that is you, run them in order (`001`, `002`) and each one
+prints its own `Migration NNN applied.` line.
 
 **b. Verify the schema does what it claims.** SQL Editor → paste
-`db/schema_test.sql` → Run. Six negative cases, each one an attack the schema
-must refuse. A passing run ends with a single row reading *All six rejection
-cases passed*; a failing case raises an exception and aborts the script, so
+`db/schema_test.sql` → Run. Nine negative cases, each one an attack the schema
+must refuse, plus one retention case that has to *keep* something: deleting an
+account must free the handle and leave the `claim_nonces` record behind. A
+passing run ends with a single row reading *All nine rejection cases passed*; a failing case raises an exception and aborts the script, so
 there is no ambiguous outcome. It ends in `rollback` and leaves nothing behind.
 If a case fails, stop here — the failure is in the schema, not in the test.
 
@@ -151,10 +157,12 @@ stellar contract invoke --id <ESCROW_ID> --source paytag-dev --network testnet \
 cd web && pnpm install && pnpm dev
 ```
 
-0. Run `db/migration-001-roles.sql` in the SQL Editor if you set the schema up
-   before the directory existed. It adds `cards.role` and recreates the
-   `public_cards` view; it is safe to run twice and prints
-   `Migration 001 applied.` when it worked.
+0. If your project predates this section of the docs, run the migrations in
+   order: `db/migration-001-roles.sql` (adds `cards.role`, recreates
+   `public_cards`) and `db/migration-002-account.sql` (adds `payout_prefs`, and
+   makes `claim_nonces` survive an account deletion). Both are safe to run
+   twice and print `Migration NNN applied.` when they worked. A project created
+   from today's `schema.sql` already has all of it.
 1. Open `/profile` — or the account menu in the header —
    and press **Continue with GitHub**.
 2. Approve. You land back where you started, showing `@you` with a
@@ -166,6 +174,16 @@ cd web && pnpm install && pnpm dev
 5. From another wallet, send XLM to `/p/gh/<your-handle>`.
 6. Open `/claim`, connect a wallet and press **Claim**. The transaction hash
    goes in `docs/evidence/tx-hashes.md`.
+7. Optional, and worth doing once: on `/profile`, set a **payout wallet** to a
+   second funded address and claim again. The claim is signed from the connected
+   wallet and the money lands in the saved one — `claim` does not make the
+   recipient authorize anything (SPEC §9.1). Ask for a different recipient while
+   an address is saved and `/api/verify/claim-auth` refuses with a 403 naming the
+   saved address; that refusal is the feature.
+8. Also once, on a throwaway account: **Delete my account** at the bottom of
+   `/profile`, type the handle, and sign in again. The handle verifies as new,
+   and the escrow that was waiting for it is still waiting — it was never in the
+   account (SPEC §9.2).
 
 Both `/profile` and `/claim` render an `auth_error` from the callback, and the
 callback sends failures back to whichever of the two started the flow.

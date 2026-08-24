@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import ConnectPanel from "@/components/ConnectPanel";
+import PayoutPanel from "@/components/PayoutPanel";
 import MyCards from "@/components/MyCards";
+import DeleteAccount from "@/components/DeleteAccount";
 
 export const metadata: Metadata = {
-  title: "Your profile — Paytag",
+  title: "Profile — Paytag",
   description:
-    "Verify a GitHub or X handle, write your card, and withdraw what people sent you.",
+    "Your verified handles, where your escrow pays out, and your cards.",
 };
 
 /**
- * Everything that is about *you*, on one page: which accounts you have proved
- * are yours, the cards hanging off them, and the two things you can do next.
+ * Everything that is about *you*, on one page: which accounts you proved are
+ * yours, where their money lands, the cards hanging off them, and the way out.
  *
- * The identity rows come first on purpose. Nothing else on this page works
- * until at least one of them is verified — a card needs an identity to hang
- * off, and a claim needs one to pay out to.
+ * Read as settings rather than as a landing page — labels and rows, no
+ * paragraphs. The order is the order of dependency: the identities come first
+ * because nothing else here works until one is verified, the payout address
+ * next because it decides where a claim can pay, then the cards, and leaving
+ * last.
  */
 export default async function ProfilePage({
   searchParams,
@@ -26,28 +29,15 @@ export default async function ProfilePage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">Your profile</h1>
-        <p className="mt-2 text-dim">
-          Prove an account is yours, say what you do, get paid for it.
-        </p>
-      </header>
+      <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
 
       <ConnectPanel authError={authError} />
 
+      <PayoutPanel />
+
       <MyCards />
 
-      <section className="card flex flex-wrap items-center gap-3 p-5">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold">Money waiting for you</h2>
-          <p className="mt-0.5 text-sm text-mute">
-            Escrow pays out to a wallet you name, one identity at a time.
-          </p>
-        </div>
-        <Link className="btn btn-ghost" href="/claim">
-          Go to claim
-        </Link>
-      </section>
+      <DeleteAccount />
     </div>
   );
 }

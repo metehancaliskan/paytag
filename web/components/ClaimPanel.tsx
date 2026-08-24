@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "./WalletProvider";
 import { useIdentity, identityList } from "./useIdentity";
+import { usePayout } from "./usePayout";
 import CopyButton from "./CopyButton";
 import { GithubMark, XMark } from "./icons";
 import { describeAuthError } from "@/lib/auth-errors";
@@ -24,6 +25,7 @@ import {
   kindUrlPrefix,
   slugOf,
 } from "@/lib/identity";
+import { claimDestination } from "@/lib/payout";
 import { fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
 import {
   DEFAULT_TOKEN,
@@ -53,6 +55,14 @@ export default function ClaimPanel({
   const [pick, setPick] = useState(0);
   const verified = mine[Math.min(pick, Math.max(mine.length - 1, 0))] ?? null;
 
+  // Where the money is allowed to land. A saved address wins over the connected
+  // wallet, and the verifier enforces the same rule server side — so this is
+  // not a convenience, it is the destination that will be signed for. The
+  // contract does not ask the recipient to authorize anything, which is why a
+  // hot wallet can submit a claim that pays a cold one.
+  const { savedFor } = usePayout();
+  const destination = claimDestination(savedFor(verified?.kind), address);
+
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [ledger, setLedger] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +71,8 @@ export default function ClaimPanel({
   const [claimed, setClaimed] = useState<{
     hash: string;
     amount: string;
+    /** Recorded rather than re-read: it is where the money actually went. */
+    to: string;
   } | null>(null);
 
   // What is waiting for the verified handle. Runs only once there is one —
@@ -103,6 +115,8 @@ export default function ClaimPanel({
 
   async function claimAll() {
     if (!verified || !address || claimable.length === 0) return;
+    const to = destination.address;
+    if (!to) return;
     const ids = claimable.map((p) => p.id);
     setError(null);
     try {
@@ -117,7 +131,7 @@ export default function ClaimPanel({
         body: JSON.stringify({
           kind: verified.kind,
           handle: verified.handle,
-          recipient: address,
+          recipient: to,
           paymentIds: ids,
         }),
       });
@@ -133,10 +147,13 @@ export default function ClaimPanel({
 
       setBusy("Preparing the transaction…");
       const tx = await buildClaim({
+        // The connected wallet submits and pays the fee; `recipient` is where
+        // the escrow lands. They are the same address unless a payout address
+        // was saved, and nothing on chain requires them to be.
         source: address,
         paymentIds: ids,
         identity: fromHex(verified.identityHex),
-        recipient: address,
+        recipient: to,
         nonce: fromHex(auth.nonce),
         expiresAt: auth.expiresAt,
         signature: fromHex(auth.signature),
@@ -147,7 +164,7 @@ export default function ClaimPanel({
 
       setBusy("Submitting…");
       const out = await submitSigned(signed);
-      setClaimed({ hash: out.hash, amount: fromUnits(total) });
+      setClaimed({ hash: out.hash, amount: fromUnits(total), to });
 
       const [list, seq] = await Promise.all([
         listPaymentsForIdentity(verified.identityHex),
@@ -172,7 +189,7 @@ export default function ClaimPanel({
           <span className="num">{claimed.amount}</span> {DEFAULT_TOKEN.symbol}{" "}
           is in your wallet
         </h2>
-        <p className="mono mt-1 text-mute">{address}</p>
+        <p className="mono mt-1 text-mute">{claimed.to}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <a
             className="btn btn-ghost btn-sm"
@@ -363,7 +380,21 @@ export default function ClaimPanel({
           </div>
         ) : (
           <>
-            <p className="mono text-dim">{address}</p>
+            <p className="mono text-dim">{destination.address ?? address}</p>
+            {destination.locked ? (
+              <p className="mt-1 text-xs text-mute">
+                The payout address saved on your profile. Signing from{" "}
+                <span className="mono">{shortAddr(address)}</span>.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-mute">
+                The connected wallet.{" "}
+                <Link className="link" href="/profile">
+                  Lock one address instead
+                </Link>
+                .
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button
                 className="btn btn-primary"

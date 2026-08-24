@@ -9,6 +9,7 @@ import {
   verifierPublicKeyHex,
 } from "@/lib/verifier";
 import { latestLedger } from "@/lib/contract";
+import { isPayoutAddress } from "@/lib/payout";
 import { CLAIM_AUTH_LEDGERS, ESCROW_ID } from "@/lib/config";
 
 export const runtime = "nodejs";
@@ -32,6 +33,10 @@ export const runtime = "nodejs";
  *      somebody else's tag.
  *   4. The recipient address goes into the preimage, so an intercepted
  *      signature cannot be redirected to a different wallet.
+ *   4b. And if the reader has saved a payout address, the recipient must BE
+ *      that address. This is the one check that survives a stolen session: the
+ *      thief holds the cookie, but the destination was decided before they
+ *      arrived and they cannot change it here.
  *   5. The nonce is recorded before the signature is produced. Reversing that
  *      order would let a crash hand out a signature with no record of it.
  *   6. The window is short (CLAIM_AUTH_LEDGERS), so a leaked authorization is
@@ -65,6 +70,14 @@ export async function POST(request: NextRequest) {
     return bad(400, "handle and recipient are required.");
   }
 
+  // Checked here and not only in the browser: the recipient is inside the
+  // signed preimage, and a signature over a malformed address is a signature
+  // over money nobody can collect. The checksum is the half that catches a
+  // single mistyped character.
+  if (!isPayoutAddress(recipient)) {
+    return bad(400, "That recipient is not a valid Stellar account address.");
+  }
+
   let handle: string;
   try {
     handle = normalizeHandle(handleInput, kind as IdentityKind);
@@ -86,7 +99,7 @@ export async function POST(request: NextRequest) {
 
   const { data: identity, error: identityError } = await admin
     .from("identities")
-    .select("handle, external_id, identity_key")
+    .select("id, handle, external_id, identity_key")
     .eq("profile_id", user.id)
     .eq("kind", kind)
     .maybeSingle();
@@ -105,6 +118,23 @@ export async function POST(request: NextRequest) {
     return bad(
       403,
       `You are signed in as @${identity.handle}, so you cannot claim @${handle}.`,
+    );
+  }
+
+  // A saved payout address is a lock, not a hint. Read with the service role
+  // rather than through the session so that this cannot be sidestepped by a
+  // request that arrives without the cookie the RLS policy reads.
+  const { data: payout, error: payoutError } = await admin
+    .from("payout_prefs")
+    .select("address")
+    .eq("identity_id", identity.id)
+    .maybeSingle();
+
+  if (payoutError) return bad(500, "Could not read the payout address.");
+  if (payout?.address && payout.address !== recipient) {
+    return bad(
+      403,
+      `@${identity.handle} pays out to ${payout.address}. Change it on your profile, or claim to that wallet.`,
     );
   }
 

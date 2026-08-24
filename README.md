@@ -65,14 +65,17 @@ contracts/        Rust / soroban-sdk 26 — escrow contract
   escrow/         paytag-escrow crate
 web/              Next.js 16 — UI + verifier API routes (Phase 3-4)
 db/
-  schema.sql      Supabase schema: profiles, identities, cards, claim_nonces, RLS policies
-  schema_test.sql Behavioral test for the schema — six negative cases
-  migration-001-roles.sql  Adds cards.role (shiller | dev) and the directory view
+  schema.sql      Supabase schema, always current: profiles, identities, cards,
+                  payout_prefs, claim_nonces, RLS policies
+  schema_test.sql Behavioral test for the schema — nine negative cases, one retention case
+  migration-001-roles.sql    Adds cards.role (shiller | dev) and the directory view
+  migration-002-account.sql  Adds payout_prefs; keeps nonce records past account deletion
 docs/
   PLAN.md         Phase-by-phase build plan, test criteria at every step
   SPEC.md         Technical spec + data model (Phase 1)
   SECURITY.md     Key inventory, layered defense, pre-public checklist
   SETUP-AUTH.md   Setting up GitHub OAuth + Supabase so claiming works
+  DESIGN.md       The design language: the mark, the palette, the four screens
   DEPLOY.md       Going live on Vercel: the secret gate, env vars, auth URLs
   evidence/       Instawards evidence package: tx hashes, screenshots, logs
 scripts/
@@ -118,7 +121,7 @@ rather than letting a dollar figure imply a promise the chain never made.
 
 USDC stays available as an optional second asset (there is no official Circle USDC on testnet,
 so we issue our own from a test issuer and wrap it in a Stellar Asset Contract). Moving to
-mainnet USDC is a single address change
+mainnet USDC is a single address change.
 
 ## Out of scope (Instawards SOW)
 

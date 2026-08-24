@@ -10,6 +10,11 @@
 -- Consequence: this database is not a ledger, it is a shop window. It was
 -- designed accordingly — off the critical path, and its loss is recoverable.
 --
+-- THIS FILE IS ALWAYS THE CURRENT SCHEMA. A fresh project needs nothing else:
+-- the `migration-*.sql` files exist only for a deployment that already ran an
+-- older version of this one. Whatever a migration adds is folded back in here
+-- the same day, so "run schema.sql" is never half an install.
+--
 -- Setup:  Supabase > SQL Editor > paste this file > Run
 -- ===========================================================================
 
@@ -98,6 +103,13 @@ create table if not exists public.cards (
   identity_id  uuid primary key references public.identities (id) on delete cascade,
   profile_id   uuid not null references public.profiles (id) on delete cascade,
 
+  -- What kind of contributor this is, and the directory's only filter:
+  --   shiller — writes, posts, explains, brings people in
+  --   dev     — ships code, tools, contracts, docs
+  -- The third kind of user in the product sends money and has no card, so it
+  -- has no value here. A third contributor role means editing this constraint.
+  role         text not null check (role in ('shiller', 'dev')),
+
   headline     text not null check (length(headline) between 3 and 80),
   summary      text not null check (length(summary) between 20 and 1000),
 
@@ -114,6 +126,45 @@ create table if not exists public.cards (
 
 comment on table public.cards is
   'Contribution card. One per identity; no row can exist before the identity is verified.';
+comment on column public.cards.role is
+  'What kind of contributor this card belongs to: shiller | dev. Drives the directory filter.';
+
+-- The directory reads published cards newest first. Without this it is a
+-- sequential scan plus a sort on every page view.
+create index if not exists cards_published_role_idx
+  on public.cards (role, updated_at desc)
+  where published;
+
+-- ------------------------------------------------------------ payout_prefs
+--
+-- Where a claim on this identity must pay.
+--
+-- A destination declared in advance, rather than "whatever wallet is connected
+-- right now": people claim from a hot wallet into a cold one, and a stolen
+-- session should not be able to name its own address. When a row exists the
+-- verifier signs for THIS address and refuses any other. The contract does not
+-- make the recipient authorize the transaction, so the connected wallet can
+-- submit the claim while the money lands somewhere else.
+--
+-- A separate table, not a column on `identities`, and that is the entire point:
+-- RLS grants privileges per row, not per column. An UPDATE policy on
+-- `identities` would let a user rewrite their own `handle`. `identities` stays
+-- service-role-only forever.
+
+create table if not exists public.payout_prefs (
+  -- One per identity, not per account: two identities are two escrow pools.
+  identity_id uuid primary key references public.identities (id) on delete cascade,
+  profile_id  uuid not null references public.profiles (id) on delete cascade,
+
+  -- Shape enforced here; the base32 CHECKSUM is enforced in lib/payout.ts.
+  address     text not null check (address ~ '^G[A-Z2-7]{55}$'),
+
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+comment on table public.payout_prefs is
+  'Where a claim on this identity must pay. When a row exists the verifier signs for this address and no other.';
 
 -- ------------------------------------------------------------ claim_nonces
 --
@@ -132,7 +183,11 @@ comment on table public.cards is
 
 create table if not exists public.claim_nonces (
   nonce             text primary key check (nonce ~ '^[0-9a-f]{64}$'),
-  profile_id        uuid not null references public.profiles (id) on delete cascade,
+  -- Nullable, ON DELETE SET NULL: an account can be deleted, and the record of
+  -- every authorization ever signed has to outlive it. That record is what
+  -- guarantees a nonce is signed at most once. What stays behind — an identity
+  -- key and a public wallet address — is on chain in the claim anyway.
+  profile_id        uuid references public.profiles (id) on delete set null,
 
   -- Which tag the signature was for, and where it was allowed to pay. Both are
   -- inside the signed preimage; kept here so an incident can be reconstructed
@@ -175,6 +230,10 @@ drop trigger if exists cards_touch on public.cards;
 create trigger cards_touch before update on public.cards
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists payout_prefs_touch on public.payout_prefs;
+create trigger payout_prefs_touch before update on public.payout_prefs
+  for each row execute function public.touch_updated_at();
+
 -- ------------------------------------------------ profile ↔ card consistency
 --
 -- `cards.profile_id` must match the identity's profile. Otherwise someone
@@ -203,15 +262,42 @@ drop trigger if exists cards_owner_check on public.cards;
 create trigger cards_owner_check before insert or update on public.cards
   for each row execute function public.cards_profile_matches_identity();
 
+-- The same trap for the payout address, and a more expensive one: pointing a
+-- payout row at somebody else's identity would have the verifier sign THEIR
+-- escrow over to YOUR wallet.
+
+create or replace function public.payout_profile_matches_identity()
+returns trigger
+language plpgsql
+as $$
+declare
+  owner uuid;
+begin
+  select profile_id into owner from public.identities where id = new.identity_id;
+  if owner is null then
+    raise exception 'identity not found: %', new.identity_id;
+  end if;
+  if owner <> new.profile_id then
+    raise exception 'a payout address cannot be bound to a profile other than the identity''s owner';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists payout_prefs_owner_check on public.payout_prefs;
+create trigger payout_prefs_owner_check before insert or update on public.payout_prefs
+  for each row execute function public.payout_profile_matches_identity();
+
 -- --------------------------------------------------------------------- RLS
 --
 -- Default: nothing. Then opened up one at a time.
 -- The investor side reads without logging in, so `anon` gets SELECT too — but
 -- only on published cards.
 
-alter table public.profiles   enable row level security;
-alter table public.identities enable row level security;
-alter table public.cards      enable row level security;
+alter table public.profiles     enable row level security;
+alter table public.identities   enable row level security;
+alter table public.cards        enable row level security;
+alter table public.payout_prefs enable row level security;
 
 -- profiles ---------------------------------------------------------------
 
@@ -260,6 +346,29 @@ drop policy if exists cards_delete_own on public.cards;
 create policy cards_delete_own on public.cards
   for delete using (profile_id = (select auth.uid()));
 
+-- payout_prefs -----------------------------------------------------------
+--
+-- Your own row, and nothing else — not even readable by others. Where a person
+-- keeps their money is nobody's business, and a public list of payout
+-- addresses is a list of addresses worth attacking.
+
+drop policy if exists payout_select_own on public.payout_prefs;
+create policy payout_select_own on public.payout_prefs
+  for select using (profile_id = (select auth.uid()));
+
+drop policy if exists payout_insert_own on public.payout_prefs;
+create policy payout_insert_own on public.payout_prefs
+  for insert with check (profile_id = (select auth.uid()));
+
+drop policy if exists payout_update_own on public.payout_prefs;
+create policy payout_update_own on public.payout_prefs
+  for update using (profile_id = (select auth.uid()))
+  with check (profile_id = (select auth.uid()));
+
+drop policy if exists payout_delete_own on public.payout_prefs;
+create policy payout_delete_own on public.payout_prefs
+  for delete using (profile_id = (select auth.uid()));
+
 -- ---------------------------------------------------------------- the view
 --
 -- Everything the profile page needs in a single query: the card, the identity
@@ -278,11 +387,15 @@ select
   i.identity_key,
   i.external_login,
   i.verified_at,
+  c.role,
   c.headline,
   c.summary,
   c.ecosystems,
   c.links,
   c.updated_at,
+  -- The directory asks for "everyone with a card"; a left join alone cannot
+  -- express that without repeating the null check at every call site.
+  (c.headline is not null) as has_card,
   p.id           as profile_id,
   p.display_name,
   -- The other identities this person has verified: [{kind, handle}]
@@ -300,4 +413,4 @@ join public.profiles p on p.id = i.profile_id
 left join public.cards c on c.identity_id = i.id and c.published;
 
 comment on view public.public_cards is
-  'The view the profile page reads. A row is returned even with no card: the identity may be verified but the card not yet filled in.';
+  'The profile page and the directory read this. A row exists for every verified identity; has_card says whether a published card is attached.';

@@ -91,26 +91,22 @@ export default function ConnectPanel({ authError }: { authError?: string }) {
         <ul className="grid gap-3 text-sm text-mute sm:grid-cols-3">
           <li className="card p-4">
             <span className="badge">reads</span>
-            <p className="mt-2">Your username and account id. Nothing else.</p>
+            <p className="mt-2">Username and account id.</p>
           </li>
           <li className="card p-4">
             <span className="badge">never</span>
-            <p className="mt-2">Your code, your posts, your wallet keys.</p>
+            <p className="mt-2">Code, posts, wallet keys.</p>
           </li>
           <li className="card p-4">
             <span className="badge">then</span>
-            <p className="mt-2">
-              You pick the wallet. Signing out undoes the link.
-            </p>
+            <p className="mt-2">You pick the wallet.</p>
           </li>
         </ul>
       )}
 
       {anySigned && (
-        <p className="text-xs leading-relaxed text-mute">
-          Each identity holds its own escrow, and each one can carry its own
-          card. Verifying both links them on your pages; it does not merge the
-          money.
+        <p className="text-xs text-mute">
+          Each identity holds its own escrow and its own card.
         </p>
       )}
     </div>
@@ -169,9 +165,7 @@ function Row({
           <>
             <p className="font-semibold">{name}</p>
             <p className="text-xs text-mute">
-              {available
-                ? "Proves the handle is yours, so escrow can pay out to your wallet."
-                : unavailableNote}
+              {available ? "Proves the handle is yours." : unavailableNote}
             </p>
           </>
         )}
