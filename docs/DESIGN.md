@@ -140,7 +140,11 @@ separate cards, separate rows in `identities`. The interface says so plainly and
 then gets out of the way:
 
 - The profile lists them as two rows under one account, not two accounts.
-- Anything that acts on one — the claim, the card editor — shows a small
-  segmented control rather than guessing which you meant.
+- Anything that acts on one — the claim, the card editor, the payout address —
+  shows a small segmented control rather than guessing which you meant.
+- Wherever one identity is shown, the *other* one can be verified in place. A
+  page that says "verified as @you" while money sits waiting for your other
+  handle, and offers no way to reach it from there, is hiding the thing it
+  just implied.
 - Nothing anywhere sums the two into one number. A total spanning two identities
   would not be any real amount of anything.

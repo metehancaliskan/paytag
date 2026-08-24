@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "./WalletProvider";
-import { useIdentity, identityList } from "./useIdentity";
+import {
+  useIdentity,
+  identityList,
+  PROVIDER_KIND,
+  type ProviderKey,
+} from "./useIdentity";
 import { usePayout } from "./usePayout";
 import CopyButton from "./CopyButton";
 import { GithubMark, XMark } from "./icons";
@@ -21,7 +26,6 @@ import { sign, networkMismatch } from "@/lib/freighter";
 import {
   KIND,
   fromHex,
-  kindLabel,
   kindUrlPrefix,
   slugOf,
 } from "@/lib/identity";
@@ -33,6 +37,18 @@ import {
   explorerTx,
   tokenByContractId,
 } from "@/lib/config";
+
+/**
+ * The two providers, in the order they appear everywhere else.
+ *
+ * Kept beside the claim flow rather than in `useIdentity` because the icon is
+ * JSX; the mapping from provider to identity kind lives there, where the rest
+ * of the identity rules are.
+ */
+const PROVIDERS: { key: ProviderKey; label: string; icon: React.ReactNode }[] = [
+  { key: "github", label: "GitHub", icon: <GithubMark size={14} /> },
+  { key: "x", label: "X", icon: <XMark size={12} /> },
+];
 
 export default function ClaimPanel({
   hintHandle,
@@ -62,6 +78,14 @@ export default function ClaimPanel({
   // hot wallet can submit a claim that pays a cold one.
   const { savedFor } = usePayout();
   const destination = claimDestination(savedFor(verified?.kind), address);
+
+  // The providers this reader has NOT verified yet. Both identity kinds are
+  // claimable and each holds its own escrow, so one verified handle is a start,
+  // not a finish: the other one may have money waiting that this session cannot
+  // even see.
+  const missing = PROVIDERS.filter(
+    (p) => !mine.some((v) => v.kind === PROVIDER_KIND[p.key]),
+  );
 
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [ledger, setLedger] = useState<number | null>(null);
@@ -272,13 +296,29 @@ export default function ClaimPanel({
                 ))}
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-3 text-sm text-mute">
-              <span>
-                {kindLabel(verified.kind)} identity. Only a wallet you name can
-                be the destination.
-              </span>
+            {/* Verifying the other provider has to be possible from HERE.
+                Money waiting for an X handle is invisible to someone signed in
+                with GitHub, and sending them to /profile to fix that is asking
+                them to leave the page that told them something was missing. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {missing.map((p) => (
+                <button
+                  key={p.key}
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => void signIn(p.key, "/claim")}
+                  disabled={p.key === "x" && !X_ENABLED}
+                  title={
+                    p.key === "x" && !X_ENABLED
+                      ? "X sign-in is not enabled — SPEC §7.4"
+                      : undefined
+                  }
+                >
+                  {p.icon}
+                  Verify {p.label} too
+                </button>
+              ))}
               <button
-                className="btn btn-quiet btn-sm"
+                className="btn btn-quiet btn-sm ml-auto"
                 onClick={() => void signOut()}
               >
                 Sign out

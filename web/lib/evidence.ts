@@ -154,8 +154,15 @@ export const EVIDENCE: EvidenceGroup[] = [
   },
 ];
 
-/** Still to be recorded — stated rather than quietly omitted. */
+/**
+ * Still to be recorded — stated rather than quietly omitted.
+ *
+ * Kept to one line each: this list is read by people deciding whether to trust
+ * the rest of the page, and a gap explained at length reads like an excuse.
+ * It has to stay current — a stale gap is worse than no list, because it
+ * understates what actually works.
+ */
 export const EVIDENCE_GAPS = [
-  "Escrow deploy and init transaction hashes (the contract is live, the two hashes were not captured at the time).",
-  "Phase 3: the GitHub OAuth → verifier signature → claim round trip, once the verifier endpoint exists.",
+  "The escrow's own deploy and init hashes. The contract is live; those two were never captured.",
+  "A claim authorized by the verifier endpoint, end to end. The code and the sign-in both work; the transaction is not on this page yet.",
 ];
