@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
-import { useIdentity } from "./useIdentity";
+import { useIdentity, identityList } from "./useIdentity";
 import PersonCardView from "./PersonCard";
 import CopyButton from "./CopyButton";
-import { GithubMark } from "./icons";
-import { KIND, kindUrlPrefix } from "@/lib/identity";
+import { GithubMark, XMark } from "./icons";
+import { KIND, kindLabel, kindUrlPrefix, slugOf } from "@/lib/identity";
 import { parseLink, type PersonCard } from "@/lib/cards";
 import {
   ECOSYSTEMS,
@@ -66,7 +66,15 @@ export default function CardEditor() {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  const handle = identity.status === "verified" ? identity.handle : null;
+  // A card hangs off ONE identity (db/schema.sql: cards.identity_id), so a
+  // person with both a GitHub and an X handle writes two cards — separate
+  // texts, separate escrows. Which one is being edited is therefore a choice
+  // the writer makes, not something inferred from an ordering.
+  const mine = identityList(identity);
+  const [pick, setPick] = useState(0);
+  const chosen = mine[Math.min(pick, Math.max(mine.length - 1, 0))] ?? null;
+  const handle = chosen?.handle ?? null;
+  const kind = chosen?.kind ?? KIND.GithubUser;
 
   // Load the identity row and any card already on it. Both reads are ordinary
   // authenticated reads: `identities` is world readable, and RLS on `cards`
@@ -84,7 +92,7 @@ export default function CardEditor() {
           .from("identities")
           .select("id")
           .eq("profile_id", auth.user.id)
-          .eq("kind", KIND.GithubUser)
+          .eq("kind", kind)
           .maybeSingle();
         if (idError || !id?.id) throw idError ?? new Error("no identity");
 
@@ -119,18 +127,20 @@ export default function CardEditor() {
           existing,
         });
 
-        if (existing) {
-          setRole(existing.role);
-          setHeadline(existing.headline);
-          setSummary(existing.summary);
-          setEcosystems(existing.ecosystems);
-          setLinks([
-            existing.links[0] ?? "",
-            existing.links[1] ?? "",
-            existing.links[2] ?? "",
-          ]);
-          setPublished(existing.published);
-        }
+        // Also resets when there is no card for this identity: switching from a
+        // filled GitHub card to an empty X one must not leave the old text in
+        // the form and quietly save it under the other handle.
+        setRole(existing?.role ?? null);
+        setHeadline(existing?.headline ?? "");
+        setSummary(existing?.summary ?? "");
+        setEcosystems(existing?.ecosystems ?? []);
+        setLinks([
+          existing?.links[0] ?? "",
+          existing?.links[1] ?? "",
+          existing?.links[2] ?? "",
+        ]);
+        setPublished(existing?.published ?? true);
+        setSavedAt(null);
       } catch {
         if (alive) setLoadFailed(true);
       }
@@ -139,7 +149,7 @@ export default function CardEditor() {
     return () => {
       alive = false;
     };
-  }, [supabase, handle]);
+  }, [supabase, handle, kind]);
 
   const toggleEcosystem = useCallback((name: string) => {
     setEcosystems((current) =>
@@ -172,7 +182,7 @@ export default function CardEditor() {
 
   const preview: PersonCard | null = handle
     ? {
-        kind: KIND.GithubUser,
+        kind,
         handle,
         identityKey: "",
         displayName: null,
@@ -232,14 +242,14 @@ export default function CardEditor() {
   if (identity.status === "anon") {
     return (
       <div className="card p-6">
-        <h2 className="text-lg font-bold">Connect your GitHub first</h2>
+        <h2 className="text-lg font-bold">Connect an account first</h2>
         <p className="mt-1.5 text-sm text-mute">
           A card hangs off a verified handle. That is what stops anyone from
           writing a page in your name — and it is one click.
         </p>
         <Link className="btn btn-primary mt-4" href="/connect">
           <GithubMark size={16} />
-          Connect GitHub
+          Connect GitHub or X
         </Link>
       </div>
     );
@@ -258,6 +268,31 @@ export default function CardEditor() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:items-start">
       <div className="space-y-4">
+        {mine.length > 1 && (
+          <section className="card flex flex-wrap items-center gap-3 p-4">
+            <span className="menu-label">Card for</span>
+            <div className="segmented">
+              {mine.map((v, i) => (
+                <button
+                  key={v.identityHex}
+                  aria-pressed={v.identityHex === chosen?.identityHex}
+                  onClick={() => setPick(i)}
+                >
+                  {v.kind === KIND.XUser ? (
+                    <XMark size={12} className="mr-1 inline align-[-1px]" />
+                  ) : (
+                    <GithubMark size={12} className="mr-1 inline align-[-1px]" />
+                  )}
+                  @{v.handle}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-mute">
+              Each identity keeps its own card and its own escrow.
+            </span>
+          </section>
+        )}
+
         {/* ------------------------------------------------------- role */}
         <section className="card p-5">
           <h2 className="font-semibold">What do you do?</h2>
@@ -431,7 +466,7 @@ export default function CardEditor() {
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Link
                   className="btn btn-ghost btn-sm"
-                  href={`/p/gh/${handle}`}
+                  href={`/p/${slugOf(kind)}/${handle}`}
                 >
                   View my page
                 </Link>
@@ -443,8 +478,8 @@ export default function CardEditor() {
                 <CopyButton
                   value={
                     typeof window === "undefined"
-                      ? `/p/gh/${handle}`
-                      : `${window.location.origin}/p/gh/${handle}`
+                      ? `/p/${slugOf(kind)}/${handle}`
+                      : `${window.location.origin}/p/${slugOf(kind)}/${handle}`
                   }
                   label="Copy my link"
                   className="btn btn-quiet btn-sm"
@@ -468,8 +503,9 @@ export default function CardEditor() {
         </p>
         {preview && <PersonCardView card={preview} preview />}
         <p className="text-xs leading-relaxed text-mute">
-          {kindUrlPrefix(KIND.GithubUser)}
-          {handle} is the tag money is bound to. The card only describes it.
+          {kindUrlPrefix(kind)}
+          {handle} is the {kindLabel(kind)} tag money is bound to. The card only
+          describes it.
         </p>
       </aside>
     </div>

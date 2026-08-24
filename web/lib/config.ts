@@ -133,6 +133,18 @@ export const SUPABASE_ANON_KEY = (
 /** Can this deployment verify identities at all? */
 export const AUTH_ENABLED = SUPABASE_URL !== "" && SUPABASE_ANON_KEY !== "";
 
+/**
+ * Is "Continue with X" offered?
+ *
+ * A flag rather than a probe, because nothing in the browser can see whether
+ * the Supabase project has the X provider configured — and an enabled button
+ * that dead-ends at Supabase's error page is worse than a disabled one that
+ * says why. Set NEXT_PUBLIC_X_ENABLED=1 once the provider has its client id
+ * and secret (docs/SETUP-AUTH.md §6).
+ */
+export const X_ENABLED =
+  AUTH_ENABLED && (process.env.NEXT_PUBLIC_X_ENABLED ?? "").trim() === "1";
+
 /** Longest escrow window the contract accepts (lib.rs MAX_EXPIRY_LEDGERS). */
 export const MAX_EXPIRY_LEDGERS = 518_400;
 

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useIdentity } from "./useIdentity";
 import { CheckMark, ChevronRight, GithubMark } from "./icons";
 import { browserSupabase } from "@/lib/supabase/client";
-import { KIND } from "@/lib/identity";
+import { KIND, slugOf, type IdentityKind } from "@/lib/identity";
 
 /**
  * The one row at the top of the dashboard that is about *you*.
@@ -24,6 +24,8 @@ export default function YouStrip() {
   const [listed, setListed] = useState<boolean | null>(null);
 
   const handle = identity.status === "verified" ? identity.handle : null;
+  const kind: IdentityKind =
+    identity.status === "verified" ? identity.kind : KIND.GithubUser;
 
   useEffect(() => {
     if (!supabase || !handle) return;
@@ -36,7 +38,7 @@ export default function YouStrip() {
       const { data } = await supabase
         .from("public_cards")
         .select("has_card")
-        .eq("kind", KIND.GithubUser)
+        .eq("kind", kind)
         .eq("handle", handle)
         .maybeSingle();
       if (alive) setListed(data?.has_card === true);
@@ -45,7 +47,7 @@ export default function YouStrip() {
     return () => {
       alive = false;
     };
-  }, [supabase, handle]);
+  }, [supabase, handle, kind]);
 
   if (identity.status === "off") return null;
 
@@ -57,7 +59,7 @@ export default function YouStrip() {
     return (
       <Row
         title="Get paid for what you already do"
-        body="Developers and amplifiers: one short form puts you in this list."
+        body="Developers and amplifiers: verify a GitHub or X handle, fill one short form."
         cta="Submit yourself"
         href="/app/submit"
       />
@@ -78,7 +80,7 @@ export default function YouStrip() {
         quiet
         href="/app/submit"
         extra={
-          <Link className="btn btn-quiet btn-sm" href={`/p/gh/${handle}`}>
+          <Link className="btn btn-quiet btn-sm" href={`/p/${slugOf(kind)}/${handle}`}>
             View my page
           </Link>
         }

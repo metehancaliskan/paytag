@@ -172,12 +172,64 @@ callback sends failures back to whichever of the two started the flow.
 
 ---
 
+## 6. Adding X (Twitter)
+
+GitHub and X run through the same machinery: same Supabase callback URL, same
+`identities` table, same claim signature. Only two things differ — where the
+client id comes from, and that X charges for the verification call.
+
+**a. Create the app.** <https://developer.x.com> → a project and an app →
+**User authentication settings** → set it up:
+
+| Field | Value |
+|---|---|
+| App permissions | Read |
+| Type of App | Web App |
+| Callback URI / Redirect URL | `https://<project-ref>.supabase.co/auth/v1/callback` |
+| Website URL | your deployment's URL |
+
+Same as GitHub: the callback points at **Supabase**, not at this app, so the
+OAuth secret never enters this repository. Copy the **OAuth 2.0 Client ID** and
+**Client Secret**.
+
+**b. Enable the provider.** Supabase → Authentication → Sign In / Providers →
+**X / Twitter (OAuth 2.0)** → on → paste the client id and secret. Ignore the
+legacy "Twitter (OAuth 1.0a)" entry; Supabase is deprecating it.
+
+**c. Turn the button on.** `NEXT_PUBLIC_X_ENABLED=1` in the environment (Vercel
+too), then redeploy — `NEXT_PUBLIC_*` is baked in at build time. Until then the
+X button stays visibly disabled, which is deliberate: nothing in the browser can
+tell whether the Supabase provider is configured, and a button that dead-ends at
+Supabase's error page is worse than one that says why.
+
+**d. The cost, stated plainly.** X's free tier closed to new developers in
+February 2026; new accounts are pay-per-use, and a profile read runs about
+$0.01. Verification calls `GET /2/users/me` once per sign-in, so a hundred
+verifications is roughly a dollar — but the account needs a payment method
+attached, or the call fails and the flow stops with
+`auth_error=x_unreachable`.
+
+If that is a blocker, there is a documented weaker mode:
+`X_TRUST_PROVIDER_IDENTITY=1` takes the handle from the `identity_data` Supabase
+itself received at sign-in instead of asking X. That field is provider-filled
+and cannot be rewritten with `auth.updateUser` (which only touches
+`user_metadata`), so it is not "trust the user" — it is "trust Supabase's fetch
+instead of ours". It is off by default, and it is the kind of thing that belongs
+in a deployment note rather than in a silent fallback: a verification that
+quietly degrades when a payment fails is worse than one that stops.
+
+**e. What you get.** A person can verify one GitHub handle and one X handle on
+the same Paytag account. They are separate identities with separate escrows and
+separate cards — `identities` allows one row per kind per profile, and the claim
+flow asks which one you are withdrawing. Nothing merges.
+
+---
+
 ## What is deliberately not here
 
-**X verification.** SPEC §7.4: whether "Sign in with X" works on the free tier
-is unresolved. The schema and the UI carry both identity kinds, and
-`/api/verify/claim-auth` refuses anything other than GitHub — signing for an
-identity we cannot verify is the same as signing for anyone.
+**X verification on the free tier.** It no longer exists to be had (§6d). The
+code path is live; what is missing is a funded X app, and that is a decision
+about money rather than an unfinished feature.
 
 **Repo identities (`kind 0x01`).** Would need the `repo` scope and an
 `permissions.admin` check on `GET /repos/{owner}/{repo}`. The kind byte is

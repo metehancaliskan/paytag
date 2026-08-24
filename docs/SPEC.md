@@ -611,17 +611,34 @@ evidence package.
    records `get_balance` has to scan while summing, and the gas limit. If
    needed, the total balance per identity+token gets kept in its own
    record.
-4. **How will X verification be done?** Whether "Sign in with X" (OAuth 2.0,
-   `users.read`) works on X's free tier or requires a paid monthly plan is
-   not settled. The schema and the interface are being built now to carry
-   both identities; the X button stays disabled until access is clear.
-   Alternative: give the user a one-time code and have them put it in their
-   bio — but the reading side still wants API access.
-   **Still open.** `POST /api/verify/claim-auth` refuses any `kind` other
-   than `0x00` GithubUser, and does so as its first check — on purpose.
-   Signing for an identity we cannot verify is the same as signing for
-   anyone. The schema (`identities.kind in (0, 2)`) and the UI already carry
-   both kinds, so the only missing piece is the verification path itself.
+4. ~~**How will X verification be done?**~~ **RESOLVED, and it costs money.**
+   Supabase's "X / Twitter (OAuth 2.0)" provider takes an X app's client id
+   and secret and hands back a `provider_token`, exactly as GitHub does, so
+   `/auth/callback` verifies X the same way it verifies GitHub: it asks
+   `GET https://api.x.com/2/users/me` with that token and takes `username`
+   and `id` from X's own answer. `POST /api/verify/claim-auth` now accepts
+   `kind` `0x00` and `0x02`, and refuses anything else — the rule it enforces
+   was never "GitHub only", it was "nothing we did not verify".
+
+   What changed underneath is the price, not the protocol: X's free tier
+   closed to new developers in February 2026, so that one profile read is
+   billed (about $0.01 at the time of writing) and the X app needs a payment
+   method. Two consequences are wired in rather than left implicit:
+
+   - `NEXT_PUBLIC_X_ENABLED` gates the button. Nothing in a browser can see
+     whether the Supabase provider is configured, and an enabled button that
+     dead-ends at Supabase's error page is worse than a disabled one that
+     says why.
+   - A verification that fails because the API call was refused **stops**
+     (`auth_error=x_unreachable`). It does not fall back to a weaker source.
+     `X_TRUST_PROVIDER_IDENTITY=1` opts into that weaker source explicitly —
+     the handle then comes from the `identity_data` Supabase received at
+     sign-in rather than from our own call. That field is provider-filled and
+     is not writable through `auth.updateUser` (which only touches
+     `user_metadata`), so the trust moves from "our fetch" to "Supabase's
+     fetch", not to the user. It is off by default, and it is a deployment
+     decision that belongs in a note — a check that silently degrades when a
+     card expires is worse than one that stops.
 5. **Who pays the fee for claim?** In the current design the recipient pays:
    to withdraw, they need XLM in their wallet, and an open trustline too if
    the escrow holds an issued asset rather than native XLM (which is half of

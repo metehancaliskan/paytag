@@ -54,11 +54,12 @@ export async function POST(request: NextRequest) {
   const handleInput = body.handle;
   const recipient = body.recipient;
 
-  if (kind !== KIND.GithubUser) {
-    // X verification is not wired up: SPEC §7.4 — whether "Sign in with X"
-    // works on the free tier is still unresolved. Signing for an identity we
-    // cannot verify would be the same as signing for anyone.
-    return bad(400, "Only GitHub identities can be verified right now.");
+  // Both identity kinds are signable, and for the same reason: the row in
+  // `identities` was written by the OAuth callback after the provider itself
+  // confirmed the handle. What we refuse is a kind nobody can verify — a
+  // signature for an identity we never checked is a signature for anyone.
+  if (kind !== KIND.GithubUser && kind !== KIND.XUser) {
+    return bad(400, "Only GitHub and X identities can be verified.");
   }
   if (typeof handleInput !== "string" || typeof recipient !== "string") {
     return bad(400, "handle and recipient are required.");
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
   // cookie's contents, which is the difference that matters here.
   const { data: auth } = await supabase.auth.getUser();
   const user = auth?.user;
-  if (!user) return bad(401, "Sign in with GitHub first.");
+  if (!user) return bad(401, "Sign in first.");
 
   const { data: identity, error: identityError } = await admin
     .from("identities")
@@ -91,7 +92,14 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (identityError) return bad(500, "Could not read the identity record.");
-  if (!identity) return bad(403, "This account has no verified GitHub identity.");
+  if (!identity) {
+    return bad(
+      403,
+      kind === KIND.XUser
+        ? "This account has no verified X identity."
+        : "This account has no verified GitHub identity.",
+    );
+  }
 
   if (identity.handle !== handle) {
     return bad(

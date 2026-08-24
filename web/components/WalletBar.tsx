@@ -3,12 +3,19 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "./WalletProvider";
-import { useIdentity } from "./useIdentity";
+import { useIdentity, identityList } from "./useIdentity";
 import CopyButton from "./CopyButton";
-import { CheckMark, ChevronDown, ChevronRight, GithubMark } from "./icons";
+import {
+  CheckMark,
+  ChevronDown,
+  ChevronRight,
+  GithubMark,
+  XMark,
+} from "./icons";
 import { tokenBalance } from "@/lib/contract";
 import { fromUnits, shortAddr } from "@/lib/format";
 import { DEFAULT_TOKEN, explorerAccount } from "@/lib/config";
+import { KIND } from "@/lib/identity";
 
 /**
  * The account menu.
@@ -23,6 +30,8 @@ export default function WalletBar() {
   const { address, installed, connecting, error, mismatch, connect, disconnect } =
     useWallet();
   const { identity } = useIdentity();
+  // Both verified handles, GitHub first. A person can hold one of each.
+  const mine = identityList(identity);
 
   // The balance is stored together with the address it belongs to. When the
   // user switches wallets, a stale balance must not appear next to the new
@@ -140,7 +149,7 @@ export default function WalletBar() {
         <span className="mono text-dim">{shortAddr(address)}</span>
         {identity.status === "verified" && (
           <span
-            title={`Verified as @${identity.handle}`}
+            title={mine.map((v) => `@${v.handle}`).join(" · ")}
             className="grid h-4 w-4 place-items-center rounded-full bg-accent text-accent-fg"
           >
             <CheckMark size={9} />
@@ -153,29 +162,34 @@ export default function WalletBar() {
         <div role="menu" className="menu absolute right-0 z-20 mt-2 w-80">
           {/* ------------------------------------------------ identity */}
           {identity.status === "verified" ? (
-            // A link, not a label: signing out lives on /connect, and this is
-            // the row a reader looking for it will press.
-            <Link
-              href="/connect"
-              className="menu-item"
-              onClick={() => setOpen(false)}
-            >
-              <GithubMark className="text-dim" />
-              <span className="truncate font-semibold">
-                @{identity.handle}
-              </span>
-              <span className="badge badge-claimed ml-auto shrink-0">
-                <CheckMark />
-                verified
-              </span>
-            </Link>
+            // Links, not labels: signing out lives on /connect, and these are
+            // the rows a reader looking for it will press.
+            mine.map((v) => (
+              <Link
+                key={v.identityHex}
+                href="/connect"
+                className="menu-item"
+                onClick={() => setOpen(false)}
+              >
+                {v.kind === KIND.XUser ? (
+                  <XMark size={16} className="text-dim" />
+                ) : (
+                  <GithubMark className="text-dim" />
+                )}
+                <span className="truncate font-semibold">@{v.handle}</span>
+                <span className="badge badge-claimed ml-auto shrink-0">
+                  <CheckMark />
+                  verified
+                </span>
+              </Link>
+            ))
           ) : identity.status === "loading" ? (
             <div className="menu-row">
               <div className="skeleton h-4 w-36" />
             </div>
           ) : identity.status === "off" ? (
             <p className="menu-row text-xs text-mute">
-              GitHub verification is not configured here.
+              Identity verification is not configured here.
             </p>
           ) : (
             <Link
@@ -185,9 +199,9 @@ export default function WalletBar() {
             >
               <GithubMark className="text-dim" />
               <span className="min-w-0">
-                <span className="block font-semibold">Connect GitHub</span>
+                <span className="block font-semibold">Connect an account</span>
                 <span className="block text-xs text-mute">
-                  Needed to claim what is paid to you
+                  GitHub or X — needed to claim what is paid to you
                 </span>
               </span>
               <ChevronRight className="ml-auto shrink-0 text-mute" />
@@ -285,9 +299,9 @@ function GithubLink({
   return (
     <Link
       href="/connect"
-      title={verified ? `Verified as @${identity.handle}` : "Connect GitHub"}
+      title={verified ? `Verified as @${identity.handle}` : "Connect GitHub or X"}
       aria-label={
-        verified ? `Verified as @${identity.handle}` : "Connect GitHub"
+        verified ? `Verified as @${identity.handle}` : "Connect GitHub or X"
       }
       className="relative grid h-9 w-9 place-items-center rounded-xl border border-line bg-surface text-dim transition-colors hover:border-line-strong hover:text-text"
     >

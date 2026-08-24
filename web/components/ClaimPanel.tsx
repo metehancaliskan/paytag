@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "./WalletProvider";
-import { useIdentity } from "./useIdentity";
+import { useIdentity, identityList } from "./useIdentity";
 import CopyButton from "./CopyButton";
-import { GithubMark } from "./icons";
+import { GithubMark, XMark } from "./icons";
 import { describeAuthError } from "@/lib/auth-errors";
 import {
   buildClaim,
@@ -17,9 +17,20 @@ import {
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { sign, networkMismatch } from "@/lib/freighter";
-import { KIND, fromHex, kindUrlPrefix } from "@/lib/identity";
+import {
+  KIND,
+  fromHex,
+  kindLabel,
+  kindUrlPrefix,
+  slugOf,
+} from "@/lib/identity";
 import { fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
-import { DEFAULT_TOKEN, explorerTx, tokenByContractId } from "@/lib/config";
+import {
+  DEFAULT_TOKEN,
+  X_ENABLED,
+  explorerTx,
+  tokenByContractId,
+} from "@/lib/config";
 
 export default function ClaimPanel({
   hintHandle,
@@ -33,7 +44,14 @@ export default function ClaimPanel({
   // Who is signed in is the account menu's question too, so it is answered in
   // one hook rather than twice with two OAuth calls.
   const { identity, error: signInError, signIn, signOut } = useIdentity();
-  const verified = identity.status === "verified" ? identity : null;
+
+  // A person can have verified both a GitHub and an X handle, and each holds
+  // its own escrow. `claim` pays one identity at a time, so one is selected
+  // rather than silently merged — a total spanning two identities would be a
+  // number that is not any real amount of anything.
+  const mine = identityList(identity);
+  const [pick, setPick] = useState(0);
+  const verified = mine[Math.min(pick, Math.max(mine.length - 1, 0))] ?? null;
 
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [ledger, setLedger] = useState<number | null>(null);
@@ -97,7 +115,7 @@ export default function ClaimPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: KIND.GithubUser,
+          kind: verified.kind,
           handle: verified.handle,
           recipient: address,
           paymentIds: ids,
@@ -216,29 +234,58 @@ export default function ClaimPanel({
         ) : identity.status === "loading" ? (
           <div className="skeleton h-9 w-44" />
         ) : verified ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm text-mute">
-            <span>Only a wallet you name can be the destination.</span>
-            <button
-              className="btn btn-quiet btn-sm"
-              onClick={() => void signOut()}
-            >
-              Sign out
-            </button>
+          <div className="space-y-3">
+            {/* Two verified identities means two separate escrows, so the
+                choice is explicit rather than implied by an ordering. */}
+            {mine.length > 1 && (
+              <div className="segmented">
+                {mine.map((v, i) => (
+                  <button
+                    key={v.identityHex}
+                    aria-pressed={verified.identityHex === v.identityHex}
+                    onClick={() => setPick(i)}
+                  >
+                    {v.kind === KIND.XUser ? (
+                      <XMark size={12} className="mr-1 inline align-[-1px]" />
+                    ) : (
+                      <GithubMark size={12} className="mr-1 inline align-[-1px]" />
+                    )}
+                    @{v.handle}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-3 text-sm text-mute">
+              <span>
+                {kindLabel(verified.kind)} identity. Only a wallet you name can
+                be the destination.
+              </span>
+              <button
+                className="btn btn-quiet btn-sm"
+                onClick={() => void signOut()}
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-3">
             <button
               className="btn btn-primary"
-              onClick={() => void signIn("/claim")}
+              onClick={() => void signIn("github", "/claim")}
             >
               <GithubMark size={16} />
               Continue with GitHub
             </button>
             <button
               className="btn btn-ghost"
-              disabled
-              title="Waiting on X API access — SPEC §7.4"
+              onClick={() => void signIn("twitter", "/claim")}
+              disabled={!X_ENABLED}
+              title={
+                X_ENABLED ? undefined : "X sign-in is not enabled — SPEC §7.4"
+              }
             >
+              <XMark size={14} />
               Continue with X
             </button>
           </div>
@@ -282,7 +329,7 @@ export default function ClaimPanel({
             ) : (
               <p className="mt-1 text-sm text-mute">
                 Nothing right now.{" "}
-                <Link className="link" href={`/p/gh/${verified.handle}`}>
+                <Link className="link" href={`/p/${slugOf(verified.kind)}/${verified.handle}`}>
                   Full history
                 </Link>
                 .
