@@ -118,7 +118,7 @@ rather than letting a dollar figure imply a promise the chain never made.
 
 USDC stays available as an optional second asset (there is no official Circle USDC on testnet,
 so we issue our own from a test issuer and wrap it in a Stellar Asset Contract). Moving to
-mainnet USDC is a single address change.
+mainnet USDC is a single address change
 
 ## Out of scope (Instawards SOW)
 

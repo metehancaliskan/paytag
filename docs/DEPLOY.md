@@ -74,9 +74,34 @@ the checklist above is green. Vercel builds a private repo just the same.
 **Import.** vercel.com → Add New → Project → pick the `paytag` repo.
 
 **One setting matters:** *Root Directory* = `web`. The repo root holds the Rust
-contracts; the Next app is one level down. Everything else is detected —
-framework Next.js, build `next build`, install via pnpm (the version is pinned
-in `web/package.json`'s `packageManager`).
+contracts; the Next app is one level down.
+
+The framework is pinned in `web/vercel.json` rather than left to the dashboard:
+
+```json
+{ "$schema": "https://openapi.vercel.sh/vercel.json", "framework": "nextjs" }
+```
+
+That file exists because of a failure worth remembering. With the preset left at
+"Other", the build ran perfectly — twelve pages prerendered, the route table
+printed — and *then* died with:
+
+```
+Error: No Output Directory named "public" found after the Build completed.
+```
+
+Vercel had built a Next app and then gone looking for a plain static site's
+`public/` folder. Nothing in the build log points at the framework preset, and
+the deployment reads as "Error" with a green build above it. `vercel.json`
+overrides the dashboard preset, so the answer now lives in the repo where the
+next person will find it. Symptom to recognise: a *successful* build followed by
+a missing-output error, or a deployment that goes "Ready" in two seconds and
+serves 404 — that second one is the same mistake with Root Directory unset.
+
+Everything else is detected: build `next build`, install via pnpm (the version
+is pinned in `web/package.json`'s `packageManager`). If the dashboard has an
+explicit **Output Directory** override, clear it — `vercel.json` sets the
+framework, not that field.
 
 **Environment variables.** Paste these into Settings → Environment Variables,
 for Production *and* Preview. Values come from your `web/.env.local`, except the

@@ -53,3 +53,5 @@ _to_delete/
 
 # secret scanner test artifact
 .scan-test-tmp/
+.vercel
+.env*
