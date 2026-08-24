@@ -162,12 +162,12 @@ export default function WalletBar() {
         <div role="menu" className="menu absolute right-0 z-20 mt-2 w-80">
           {/* ------------------------------------------------ identity */}
           {identity.status === "verified" ? (
-            // Links, not labels: signing out lives on /connect, and these are
+            // Links, not labels: signing out lives on /profile, and these are
             // the rows a reader looking for it will press.
             mine.map((v) => (
               <Link
                 key={v.identityHex}
-                href="/connect"
+                href="/profile"
                 className="menu-item"
                 onClick={() => setOpen(false)}
               >
@@ -193,7 +193,7 @@ export default function WalletBar() {
             </p>
           ) : (
             <Link
-              href="/connect"
+              href="/profile"
               className="menu-item"
               onClick={() => setOpen(false)}
             >
@@ -298,7 +298,7 @@ function GithubLink({
   const verified = identity.status === "verified";
   return (
     <Link
-      href="/connect"
+      href="/profile"
       title={verified ? `Verified as @${identity.handle}` : "Connect GitHub or X"}
       aria-label={
         verified ? `Verified as @${identity.handle}` : "Connect GitHub or X"

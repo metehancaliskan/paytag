@@ -31,8 +31,10 @@ export const runtime = "nodejs";
 type Verified = { handle: string; externalId: string; login: string };
 
 type Provider = {
-  /** Supabase's name for it, as it appears in `app_metadata.provider`. */
-  key: "github" | "twitter";
+  /** Supabase's name for it. "x" is OAuth 2.0; "twitter" was OAuth 1.0a. */
+  key: "github" | "x";
+  /** Older names Supabase may still report for the same provider. */
+  aliases?: string[];
   kind: IdentityKind;
   /** Ask the provider who this token belongs to. */
   whoAmI: (token: string) => Promise<Verified | null>;
@@ -58,7 +60,8 @@ const GITHUB: Provider = {
 };
 
 const X: Provider = {
-  key: "twitter",
+  key: "x",
+  aliases: ["twitter"],
   kind: KIND.XUser,
   async whoAmI(token) {
     // The paid-tier problem is real (SPEC §7.4): on an X account with no API
@@ -104,9 +107,11 @@ type SupabaseIdentity = {
 
 function handleFromSupabaseIdentity(
   identities: SupabaseIdentity[] | undefined,
-  provider: string,
+  providers: string[],
 ): Verified | null {
-  const row = identities?.find((i) => i.provider === provider);
+  const row = identities?.find(
+    (i) => i.provider !== undefined && providers.includes(i.provider),
+  );
   const data = row?.identity_data ?? null;
   if (!data) return null;
 
@@ -133,7 +138,7 @@ export async function GET(request: NextRequest) {
     ? rawNext
     : "/claim";
 
-  // Failures go back to whichever page started the flow — /connect and /claim
+  // Failures go back to whichever page started the flow — /profile and /claim
   // both render `auth_error` — so nobody is bounced to a page they never asked
   // for and told something went wrong there.
   const fail = (reason: string) => {
@@ -168,23 +173,23 @@ export async function GET(request: NextRequest) {
     url.searchParams.get("provider") ??
     (session.user.app_metadata as { provider?: string } | null)?.provider ??
     "github";
-  const provider = PROVIDERS.find((p) => p.key === hint) ?? GITHUB;
+  const provider =
+    PROVIDERS.find((p) => p.key === hint || p.aliases?.includes(hint)) ??
+    GITHUB;
 
   // This is the actual verification — everything before it only proves that
   // someone completed an OAuth flow.
   let who = await provider.whoAmI(providerToken);
 
-  if (!who && provider.key === "twitter" && TRUST_PROVIDER_IDENTITY) {
+  if (!who && provider.key === "x" && TRUST_PROVIDER_IDENTITY) {
     who = handleFromSupabaseIdentity(
       session.user.identities as SupabaseIdentity[] | undefined,
-      "twitter",
+      ["x", "twitter"],
     );
   }
 
   if (!who) {
-    return fail(
-      provider.key === "twitter" ? "x_unreachable" : "github_unreachable",
-    );
+    return fail(provider.key === "x" ? "x_unreachable" : "github_unreachable");
   }
 
   let handle: string;

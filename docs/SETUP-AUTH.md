@@ -155,7 +155,7 @@ cd web && pnpm install && pnpm dev
    before the directory existed. It adds `cards.role` and recreates the
    `public_cards` view; it is safe to run twice and prints
    `Migration 001 applied.` when it worked.
-1. Open `/connect` — or the account menu in the header, **Connect GitHub** —
+1. Open `/profile` — or the account menu in the header —
    and press **Continue with GitHub**.
 2. Approve. You land back where you started, showing `@you` with a
    **verified** badge. The account menu shows the same handle from then on.
@@ -167,7 +167,7 @@ cd web && pnpm install && pnpm dev
 6. Open `/claim`, connect a wallet and press **Claim**. The transaction hash
    goes in `docs/evidence/tx-hashes.md`.
 
-Both `/connect` and `/claim` render an `auth_error` from the callback, and the
+Both `/profile` and `/claim` render an `auth_error` from the callback, and the
 callback sends failures back to whichever of the two started the flow.
 
 ---
@@ -195,6 +195,12 @@ OAuth secret never enters this repository. Copy the **OAuth 2.0 Client ID** and
 **b. Enable the provider.** Supabase → Authentication → Sign In / Providers →
 **X / Twitter (OAuth 2.0)** → on → paste the client id and secret. Ignore the
 legacy "Twitter (OAuth 1.0a)" entry; Supabase is deprecating it.
+
+> The two are separate switches **and separate provider names**: the OAuth 2.0
+> one is `x`, the legacy one is `twitter`. Ask for the wrong name and Supabase
+> answers `{"error_code":"validation_failed","msg":"Unsupported provider:
+> provider is not enabled"}` — which names neither, and reads like the provider
+> you just enabled is off. `components/useIdentity.ts` sends `x`.
 
 **c. Turn the button on.** `NEXT_PUBLIC_X_ENABLED=1` in the environment (Vercel
 too), then redeploy — `NEXT_PUBLIC_*` is baked in at build time. Until then the

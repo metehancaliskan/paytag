@@ -279,7 +279,7 @@ export default function ClaimPanel({
             </button>
             <button
               className="btn btn-ghost"
-              onClick={() => void signIn("twitter", "/claim")}
+              onClick={() => void signIn("x", "/claim")}
               disabled={!X_ENABLED}
               title={
                 X_ENABLED ? undefined : "X sign-in is not enabled — SPEC §7.4"

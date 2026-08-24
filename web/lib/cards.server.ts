@@ -3,7 +3,7 @@ import "server-only";
 import { serverSupabase } from "./supabase/server";
 import { CARD_COLUMNS, toPersonCard, type PersonCard } from "./cards";
 import { isRoleKey, type RoleKey } from "./roles";
-import type { IdentityKind } from "./identity";
+import { KIND, type IdentityKind } from "./identity";
 
 /**
  * Reads of the public directory.
@@ -21,7 +21,7 @@ import type { IdentityKind } from "./identity";
  */
 
 export async function listCards(
-  role?: RoleKey | null,
+  filter: { role?: RoleKey | null; kind?: IdentityKind | null } = {},
   limit = 60,
 ): Promise<PersonCard[]> {
   const sb = await serverSupabase();
@@ -34,7 +34,10 @@ export async function listCards(
     .order("updated_at", { ascending: false })
     .limit(limit);
 
-  if (isRoleKey(role)) q = q.eq("role", role);
+  if (isRoleKey(filter.role)) q = q.eq("role", filter.role);
+  if (filter.kind === KIND.GithubUser || filter.kind === KIND.XUser) {
+    q = q.eq("kind", filter.kind);
+  }
 
   const { data, error } = await q;
   if (error || !data) return [];
@@ -60,21 +63,42 @@ export async function getCard(
   return toPersonCard(data);
 }
 
-/** How many people are listed, per role. Drives the filter's counts. */
-export async function countByRole(): Promise<Record<RoleKey, number>> {
+/**
+ * How many people are listed, split both ways.
+ *
+ * One query rather than four: the filter needs every count at once, and asking
+ * the database five times to draw one row of chips is how a directory starts
+ * feeling slow. The rows are tiny — two columns, one per listed card.
+ */
+export type DirectoryCounts = {
+  total: number;
+  role: Record<RoleKey, number>;
+  kind: Record<"github" | "x", number>;
+};
+
+export async function countCards(): Promise<DirectoryCounts> {
+  const zero: DirectoryCounts = {
+    total: 0,
+    role: { shiller: 0, dev: 0 },
+    kind: { github: 0, x: 0 },
+  };
   const sb = await serverSupabase();
-  const zero = { shiller: 0, dev: 0 } as Record<RoleKey, number>;
   if (!sb) return zero;
 
   const { data, error } = await sb
     .from("public_cards")
-    .select("role")
+    .select("role, kind")
     .eq("has_card", true);
 
   if (error || !data) return zero;
+
   for (const row of data) {
     const r = (row as { role?: unknown }).role;
-    if (isRoleKey(r)) zero[r] += 1;
+    const k = (row as { kind?: unknown }).kind;
+    zero.total += 1;
+    if (isRoleKey(r)) zero.role[r] += 1;
+    if (k === KIND.GithubUser) zero.kind.github += 1;
+    if (k === KIND.XUser) zero.kind.x += 1;
   }
   return zero;
 }

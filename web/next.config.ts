@@ -26,6 +26,9 @@ const nextConfig: NextConfig = {
       // behind /app. These two paths were shared while they existed.
       { source: "/people", destination: "/app", permanent: true },
       { source: "/card", destination: "/app/submit", permanent: true },
+      // The identity page grew into a profile page. /connect was in the account
+      // menu and in the docs while it existed.
+      { source: "/connect", destination: "/profile", permanent: true },
     ];
   },
 };

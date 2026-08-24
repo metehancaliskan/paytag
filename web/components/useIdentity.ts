@@ -29,11 +29,19 @@ export type VerifiedIdentity = {
   identityHex: string;
 };
 
-export type ProviderKey = "github" | "twitter";
+/**
+ * Supabase's own name for each provider.
+ *
+ * "x" is the OAuth 2.0 provider; "twitter" is the legacy OAuth 1.0a one, which
+ * Supabase is deprecating and which is a separate switch in the dashboard.
+ * Sending the wrong one is answered with "provider is not enabled", and that
+ * message names neither of them — hence this comment.
+ */
+export type ProviderKey = "github" | "x";
 
 export const PROVIDER_KIND: Record<ProviderKey, IdentityKind> = {
   github: KIND.GithubUser,
-  twitter: KIND.XUser,
+  x: KIND.XUser,
 };
 
 export type Identity =
@@ -138,7 +146,7 @@ export function useIdentity() {
   const signIn = useCallback(
     async (provider: ProviderKey = "github", next = "/claim") => {
       if (!supabase) return;
-      if (provider === "twitter" && !X_ENABLED) {
+      if (provider === "x" && !X_ENABLED) {
         setError("X sign-in is not configured on this deployment.");
         return;
       }

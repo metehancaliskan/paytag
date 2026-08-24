@@ -3,8 +3,10 @@ import Link from "next/link";
 import PersonCardView from "@/components/PersonCard";
 import HandleSearch from "@/components/HandleSearch";
 import YouStrip from "@/components/YouStrip";
-import { listCards, countByRole } from "@/lib/cards.server";
+import { GithubMark, XMark } from "@/components/icons";
+import { listCards, countCards } from "@/lib/cards.server";
 import { ROLE_LIST, isRoleKey, type RoleKey } from "@/lib/roles";
+import { KIND, type IdentityKind } from "@/lib/identity";
 
 export const metadata: Metadata = {
   title: "Discover — Paytag",
@@ -12,18 +14,40 @@ export const metadata: Metadata = {
     "Developers and amplifiers in the Stellar ecosystem, each one payable by handle. The money waits in escrow until they withdraw it.",
 };
 
+/** ?on=gh | x — which platform the handle lives on. */
+const PLATFORM: Record<string, IdentityKind> = {
+  gh: KIND.GithubUser,
+  x: KIND.XUser,
+};
+
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ role?: string }>;
+  searchParams: Promise<{ role?: string; on?: string }>;
 }) {
-  const { role: rawRole } = await searchParams;
+  const { role: rawRole, on: rawOn } = await searchParams;
   const role: RoleKey | null = isRoleKey(rawRole) ? rawRole : null;
+  const kind: IdentityKind | null = rawOn ? (PLATFORM[rawOn] ?? null) : null;
+  const on = kind === null ? null : rawOn!;
 
-  // Both at once: the counts draw the filter the list sits under, so waiting
-  // for one and then the other would show a filter with no numbers first.
-  const [cards, counts] = await Promise.all([listCards(role), countByRole()]);
-  const total = counts.shiller + counts.dev;
+  // Both at once: the counts draw the filters the list sits under, so waiting
+  // for one and then the other would show chips with no numbers first.
+  const [cards, counts] = await Promise.all([
+    listCards({ role, kind }),
+    countCards(),
+  ]);
+
+  // Keeps the other filter when one changes, so picking "X" does not silently
+  // drop the role you were looking at.
+  const href = (next: { role?: RoleKey | null; on?: string | null }) => {
+    const q = new URLSearchParams();
+    const r = next.role === undefined ? role : next.role;
+    const o = next.on === undefined ? on : next.on;
+    if (r) q.set("role", r);
+    if (o) q.set("on", o);
+    const s = q.toString();
+    return s ? `/app?${s}` : "/app";
+  };
 
   return (
     <div className="space-y-6">
@@ -40,25 +64,52 @@ export default async function Dashboard({
         <HandleSearch />
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">People to pay</h1>
-          <p className="mt-1 text-sm text-dim">
-            They named what they do. You name the amount.
-          </p>
-        </div>
+      <div className="pt-2">
+        <h1 className="text-2xl font-bold tracking-tight">People to pay</h1>
+        <p className="mt-1 text-sm text-dim">
+          They named what they do. Pick an amount and send it.
+        </p>
+      </div>
 
-        {/* Links rather than buttons: a filtered list is worth sharing, and
-            the back button should undo a filter. */}
-        <nav className="flex flex-wrap items-center gap-2" aria-label="Filter">
-          <Filter href="/app" active={role === null} label="Everyone" n={total} />
+      {/* Two filters, one line. Links rather than buttons: a filtered list is
+          worth sharing, and the back button should undo a filter. */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <nav className="flex flex-wrap items-center gap-2" aria-label="Platform">
+          <Chip href={href({ on: null })} active={on === null} label="All" n={counts.total} />
+          <Chip
+            href={href({ on: "gh" })}
+            active={on === "gh"}
+            label="GitHub"
+            n={counts.kind.github}
+            icon={<GithubMark size={13} />}
+          />
+          <Chip
+            href={href({ on: "x" })}
+            active={on === "x"}
+            label="X"
+            n={counts.kind.x}
+            icon={<XMark size={12} />}
+          />
+        </nav>
+
+        <nav
+          className="flex flex-wrap items-center gap-2 sm:ml-auto"
+          aria-label="Role"
+        >
+          <Chip
+            href={href({ role: null })}
+            active={role === null}
+            label="Everyone"
+            quiet
+          />
           {ROLE_LIST.map((r) => (
-            <Filter
+            <Chip
               key={r.key}
-              href={`/app?role=${r.key}`}
+              href={href({ role: r.key })}
               active={role === r.key}
               label={r.label}
-              n={counts[r.key]}
+              n={counts.role[r.key]}
+              quiet
             />
           ))}
         </nav>
@@ -75,47 +126,64 @@ export default async function Dashboard({
       ) : (
         <div className="card p-6">
           <h2 className="font-semibold">
-            {total === 0 ? "Nobody is listed yet" : "Nobody in this group yet"}
+            {counts.total === 0
+              ? "Nobody is listed yet"
+              : "Nobody matches these filters"}
           </h2>
           <p className="mt-1.5 text-sm text-mute">
-            {total === 0
+            {counts.total === 0
               ? "Be the first. Verify a handle, write two sentences, and the list has a first entry."
-              : "Try the other group — or put yourself in this one."}
+              : "Clear a filter, or put yourself in this group."}
           </p>
-          <Link className="btn btn-ghost mt-4" href="/app/submit">
-            Submit yourself
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {counts.total > 0 && (
+              <Link className="btn btn-ghost" href="/app">
+                Clear filters
+              </Link>
+            )}
+            <Link className="btn btn-primary" href="/app/submit">
+              Submit yourself
+            </Link>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function Filter({
+function Chip({
   href,
   active,
   label,
   n,
+  icon,
+  quiet = false,
 }: {
   href: string;
   active: boolean;
   label: string;
-  n: number;
+  n?: number;
+  icon?: React.ReactNode;
+  /** The role row is secondary to the platform row, and reads that way. */
+  quiet?: boolean;
 }) {
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-semibold transition-colors ${
+        quiet ? "text-xs" : "text-sm"
+      } ${
         active
           ? "border-accent bg-accent text-accent-fg"
           : "border-line text-mute hover:border-line-strong hover:text-text"
       }`}
     >
+      {icon}
       {label}
-      <span className={`num ml-1.5 ${active ? "opacity-70" : "text-mute"}`}>
-        {n}
-      </span>
+      {n !== undefined && (
+        <span className={`num ${active ? "opacity-70" : "text-mute"}`}>{n}</span>
+      )}
     </Link>
   );
 }

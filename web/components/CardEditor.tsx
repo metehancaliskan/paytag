@@ -247,7 +247,7 @@ export default function CardEditor() {
           A card hangs off a verified handle. That is what stops anyone from
           writing a page in your name — and it is one click.
         </p>
-        <Link className="btn btn-primary mt-4" href="/connect">
+        <Link className="btn btn-primary mt-4" href="/profile">
           <GithubMark size={16} />
           Connect GitHub or X
         </Link>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import CopyButton from "./CopyButton";
 import { usePrice } from "./usePrice";
@@ -58,7 +59,14 @@ export default function SendForm({
   const [tokenKey, setTokenKey] = useState<TokenKey>(DEFAULT_TOKEN.key);
   const token = tokenByKey(tokenKey);
 
-  const [amountInput, setAmountInput] = useState("");
+  // A directory card can link here with ?amount=10 — the quick-tip buttons do.
+  // Read once, as the initial value: after that the field belongs to the person
+  // typing in it, and a re-render must not overwrite what they wrote.
+  const params = useSearchParams();
+  const [amountInput, setAmountInput] = useState(() => {
+    const raw = (params.get("amount") ?? "").trim();
+    return /^\d{1,9}(\.\d{1,7})?$/.test(raw) ? raw : "";
+  });
   const [choice, setChoice] = useState(0);
   // Balance kept with the address it belongs to, so switching wallets can never
   // show the previous account's number next to the new address.

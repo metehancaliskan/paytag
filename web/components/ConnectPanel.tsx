@@ -50,7 +50,7 @@ export default function ConnectPanel({ authError }: { authError?: string }) {
           verified={github}
           loading={loading}
           available
-          onConnect={() => void signIn("github", "/connect")}
+          onConnect={() => void signIn("github", "/profile")}
         />
         <Row
           icon={<XMark size={18} />}
@@ -60,7 +60,7 @@ export default function ConnectPanel({ authError }: { authError?: string }) {
           loading={loading}
           available={X_ENABLED}
           unavailableNote="Not enabled on this deployment yet — SPEC §7.4."
-          onConnect={() => void signIn("twitter", "/connect")}
+          onConnect={() => void signIn("x", "/profile")}
         />
 
         {anySigned && (

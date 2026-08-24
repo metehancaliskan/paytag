@@ -3,6 +3,17 @@ import Link from "next/link";
 import { avatarUrl, cardPath, type PersonCard } from "@/lib/cards";
 import { KIND, kindUrlPrefix } from "@/lib/identity";
 import { ROLES } from "@/lib/roles";
+import { GithubMark, XMark } from "./icons";
+
+/**
+ * Quick-tip amounts, in dollars.
+ *
+ * Three presets and nothing else: the point of a directory row is to turn
+ * "I like this person's work" into a signed transaction without a detour, and a
+ * grid of ten choices is a decision, not a shortcut. Each one lands on the pay
+ * page with the field already filled, so what is left is connect and sign.
+ */
+const TIPS = [5, 10, 25] as const;
 
 /**
  * One person in the directory.
@@ -46,6 +57,11 @@ export default function PersonCardView({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {card.kind === KIND.XUser ? (
+              <XMark size={13} className="shrink-0 text-mute" />
+            ) : (
+              <GithubMark size={14} className="shrink-0 text-mute" />
+            )}
             <h3 className="truncate font-semibold">{name}</h3>
             {role && <span className="badge shrink-0">{role.label}</span>}
           </div>
@@ -76,33 +92,61 @@ export default function PersonCardView({
         </ul>
       )}
 
-      <div className="mt-3 flex items-center gap-3 border-t border-line pt-3 text-xs text-mute">
-        {card.linked.length > 0 && (
-          <span>
-            also{" "}
-            {card.linked
-              .map((l) => `${kindUrlPrefix(l.kind)}${l.handle}`)
-              .join(", ")}
-          </span>
-        )}
-        <span className="ml-auto font-semibold text-accent-text">
-          {preview ? "Send" : "Send →"}
-        </span>
-      </div>
+      {card.linked.length > 0 && (
+        <p className="mt-3 text-xs text-mute">
+          also{" "}
+          {card.linked
+            .map((l) => `${kindUrlPrefix(l.kind)}${l.handle}`)
+            .join(", ")}
+        </p>
+      )}
     </>
   );
 
   if (preview) {
-    return <div className="card p-4">{body}</div>;
+    return (
+      <div className="card p-4">
+        {body}
+        <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+          {TIPS.map((t) => (
+            <span key={t} className="btn btn-ghost btn-sm">
+              ${t}
+            </span>
+          ))}
+          <span className="btn btn-quiet btn-sm ml-auto">Open →</span>
+        </div>
+      </div>
+    );
   }
 
+  // The card is not one big link any more: the tip buttons are links of their
+  // own, and a link inside a link is invalid markup that browsers resolve by
+  // guessing. The name and the "Open" row carry the navigation instead.
   return (
-    <Link
-      href={cardPath(card)}
-      className="card block p-4 transition-colors hover:border-line-strong"
-    >
-      {body}
-    </Link>
+    <div className="card p-4 transition-colors hover:border-line-strong">
+      <Link href={cardPath(card)} className="block">
+        {body}
+      </Link>
+
+      <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+        {TIPS.map((t) => (
+          <Link
+            key={t}
+            href={`${cardPath(card)}?amount=${t}`}
+            className="btn btn-ghost btn-sm"
+            title={`Send $${t} to ${kindUrlPrefix(card.kind)}${card.handle}`}
+          >
+            ${t}
+          </Link>
+        ))}
+        <Link
+          href={cardPath(card)}
+          className="btn btn-quiet btn-sm ml-auto"
+        >
+          Open →
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -183,9 +227,8 @@ export function NoCardYet({
       <p>
         {kindUrlPrefix(kind)}
         {handle} has not written a card yet. You can still pay the handle —{" "}
-        {kind === KIND.GithubUser
-          ? "the money waits in escrow until they verify."
-          : "X verification is not live yet, so it waits until it is."}
+        the money waits in escrow until they verify the account, and comes back
+        to the sender if nobody does.
       </p>
     </div>
   );
