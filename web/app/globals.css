@@ -193,6 +193,62 @@ body {
     }
   }
 
+  /* ---------------------------------------------------------------- modal */
+
+  /* A native <dialog>. Same skin as .menu, because both are surfaces floating
+     above the page — and everything else a modal needs (focus trap, Esc, the
+     top layer, a backdrop) the browser already does correctly.
+     `margin: auto` is what centres it: a <dialog> in the top layer needs no
+     flex wrapper, and a wrapper would only give the backdrop something to
+     collide with. */
+  .modal {
+    margin: auto;
+    width: min(27rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    padding: 0;
+    border-radius: 0.875rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow:
+      0 2px 4px rgb(15 19 25 / 0.06),
+      0 24px 60px -16px rgb(15 19 25 / 0.32);
+  }
+
+  .modal::backdrop {
+    background: rgb(15 19 25 / 0.42);
+  }
+
+  :root[data-theme="dark"] .modal {
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -16px rgb(0 0 0 / 0.85);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .modal {
+      box-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -16px rgb(0 0 0 / 0.85);
+    }
+  }
+
+  /* Short and small: it arrives where the reader's attention already is, so it
+     only has to not appear out of nowhere. */
+  .modal[open] {
+    animation: modal-in 150ms ease-out;
+  }
+
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.985);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .modal[open] {
+      animation: none;
+    }
+  }
+
   /* A row that is only information. Same geometry as .menu-item, so the
      sections line up whichever one a state happens to render. */
   .menu-row {

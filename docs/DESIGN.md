@@ -152,6 +152,19 @@ The same collapse applied to the directory: two filter rows, *role* and
 *platform*, were selecting identical rows. One row now, labelled by role with
 the platform's mark beside it.
 
+**One modal, and it is the end of a task.** Publishing a card opens a dialog
+(`components/PublishedDialog.tsx`): the confirmation, the link selected and
+ready to copy, and the way out. It used to be three buttons appearing under the
+save button at the bottom of a long form — the one thing the reader wanted in
+that moment was the quietest element on the page, and often below the fold.
+
+That is the whole rule for modals here: a modal is honest when the task is
+finished and the next thing is somewhere else. It is dishonest as a way to ask
+for something the page could have asked for in place. Every one is a native
+`<dialog>` with the `.modal` skin — the browser already does the focus trap, the
+Esc key, the top layer and the backdrop, and those are the four things
+hand-rolled modals get wrong.
+
 The dashboard's first grid cell is always the dashed **+** tile. It reads as an
 empty seat at the table: whatever the filters say, there is a place for you.
 That tile replaced three sentences of invitation copy, which is the pattern to

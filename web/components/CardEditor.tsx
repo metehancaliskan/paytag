@@ -6,7 +6,7 @@ import { browserSupabase } from "@/lib/supabase/client";
 import { useIdentity, identityList } from "./useIdentity";
 import { PROVIDERS } from "./providers";
 import PersonCardView from "./PersonCard";
-import CopyButton from "./CopyButton";
+import PublishedDialog from "./PublishedDialog";
 import {
   KIND,
   kindLabel,
@@ -91,9 +91,11 @@ export default function CardEditor({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A flag, not a timestamp: nothing reads *when* it was saved, and
-  // `Date.now()` in a component is an impure call the linter is right about.
+  // Two flags, not one. `saved` opens the dialog and closing it puts that back
+  // to false; `everSaved` is what leaves a quiet line behind afterwards, so a
+  // dismissed dialog does not erase the only evidence that the save happened.
   const [saved, setSaved] = useState(false);
+  const [everSaved, setEverSaved] = useState(false);
 
   // A card hangs off ONE identity (db/schema.sql: cards.identity_id), so a
   // person with both a GitHub and an X handle writes two cards — separate
@@ -251,6 +253,7 @@ export default function CardEditor({
       );
       if (e) throw new Error(e.message);
       setSaved(true);
+      setEverSaved(true);
     } catch (e) {
       setError(describeWriteError(e));
     } finally {
@@ -567,37 +570,17 @@ export default function CardEditor({
             )}
           </div>
 
-          {saved && (
-            <div
-              aria-live="polite"
-              className="mt-4 border-t border-line pt-4 text-sm"
-            >
-              <p className="font-semibold text-accent-text">
-                {published ? "Your card is live." : "Draft saved."}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Link
-                  className="btn btn-ghost btn-sm"
-                  href={`/p/${slugOf(kind)}/${handle}`}
-                >
-                  View my page
-                </Link>
-                {published && (
-                  <Link className="btn btn-ghost btn-sm" href="/app">
-                    See the directory
-                  </Link>
-                )}
-                <CopyButton
-                  value={
-                    typeof window === "undefined"
-                      ? `/p/${slugOf(kind)}/${handle}`
-                      : `${window.location.origin}/p/${slugOf(kind)}/${handle}`
-                  }
-                  label="Copy my link"
-                  className="btn btn-quiet btn-sm"
-                />
-              </div>
-            </div>
+          {/* Everything a publish used to say inline now says it in a dialog:
+              the link was the point of this block, and at the bottom of a long
+              form it was the quietest thing on the page. What stays here is one
+              line, for after the dialog is dismissed. */}
+          {everSaved && !saved && (
+            <p aria-live="polite" className="mt-3 text-xs text-mute">
+              {published ? "Saved and listed." : "Saved as a draft."}{" "}
+              <Link className="link" href={`/p/${slugOf(kind)}/${handle}`}>
+                View my page
+              </Link>
+            </p>
           )}
 
           {error && (
@@ -623,11 +606,24 @@ export default function CardEditor({
           </p>
         </aside>
       )}
+
+      {/* Rendered closed rather than mounted on demand: `showModal()` needs an
+          element that is already in the document, and a dialog that mounts and
+          opens in the same commit does not animate. */}
+      {handle && (
+        <PublishedDialog
+          open={saved}
+          published={published}
+          kind={kind}
+          handle={handle}
+          onClose={() => setSaved(false)}
+        />
+      )}
     </div>
   );
 }
 
-/** The step number, so four questions read as four and not as a form. */
+/** The step number, so three questions read as three and not as a form. */
 function Step({ n }: { n: number }) {
   return (
     <span
