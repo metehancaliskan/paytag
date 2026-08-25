@@ -7,14 +7,14 @@ import { useIdentity, identityList } from "./useIdentity";
 import PersonCardView from "./PersonCard";
 import CopyButton from "./CopyButton";
 import { GithubMark, XMark } from "./icons";
-import { KIND, kindLabel, kindUrlPrefix, slugOf } from "@/lib/identity";
+import { KIND, kindUrlPrefix, slugOf } from "@/lib/identity";
 import { parseLink, type PersonCard } from "@/lib/cards";
 import {
   ECOSYSTEMS,
+  MAX_LINKS,
   HEADLINE_MAX,
   HEADLINE_MIN,
   MAX_ECOSYSTEMS,
-  MAX_LINKS,
   ROLE_LIST,
   SUMMARY_MAX,
   SUMMARY_MIN,
@@ -59,7 +59,12 @@ export default function CardEditor() {
   const [headline, setHeadline] = useState("");
   const [summary, setSummary] = useState("");
   const [ecosystems, setEcosystems] = useState<string[]>([]);
-  const [links, setLinks] = useState<string[]>(["", "", ""]);
+  // One input per allowed link, derived rather than typed out: the limit is
+  // MAX_LINKS in one place, and a form with a different number of boxes than the
+  // validator allows is a bug waiting for someone to raise the limit.
+  const [links, setLinks] = useState<string[]>(() =>
+    Array.from({ length: MAX_LINKS }, () => ""),
+  );
   const [published, setPublished] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -134,11 +139,9 @@ export default function CardEditor() {
         setHeadline(existing?.headline ?? "");
         setSummary(existing?.summary ?? "");
         setEcosystems(existing?.ecosystems ?? []);
-        setLinks([
-          existing?.links[0] ?? "",
-          existing?.links[1] ?? "",
-          existing?.links[2] ?? "",
-        ]);
+        setLinks(
+          Array.from({ length: MAX_LINKS }, (_, i) => existing?.links[i] ?? ""),
+        );
         setPublished(existing?.published ?? true);
         setSavedAt(null);
       } catch {
@@ -264,12 +267,18 @@ export default function CardEditor() {
   }
 
   // -------------------------------------------------------------- the form
+  //
+  // ONE card, and the whole of it fits on a phone screen: three numbered
+  // questions, an optional disclosure, and the button. It was five separate
+  // panels, which made a two-minute form look like a registration process —
+  // and buried the two fields that are actually required among three that are
+  // not.
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:items-start">
-      <div className="space-y-4">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,19rem)] lg:items-start">
+      <div className="card divide-y divide-line">
         {mine.length > 1 && (
-          <section className="card flex flex-wrap items-center gap-3 p-4">
+          <div className="flex flex-wrap items-center gap-3 p-5">
             <span className="menu-label">Card for</span>
             <div className="segmented">
               {mine.map((v, i) => (
@@ -287,16 +296,15 @@ export default function CardEditor() {
                 </button>
               ))}
             </div>
-            <span className="text-xs text-mute">
-              Each identity keeps its own card and its own escrow.
-            </span>
-          </section>
+          </div>
         )}
 
-        {/* ------------------------------------------------------- role */}
-        <section className="card p-5">
-          <h2 className="font-semibold">What do you do?</h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {/* ------------------------------------------------------ 1 role */}
+        <fieldset className="p-5">
+          <legend className="label">
+            <Step n={1} /> What do you do?
+          </legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {ROLE_LIST.map((r) => (
               <button
                 key={r.key}
@@ -316,55 +324,64 @@ export default function CardEditor() {
               </button>
             ))}
           </div>
-        </section>
+        </fieldset>
 
-        {/* --------------------------------------------------- the words */}
-        <section className="card space-y-4 p-5">
-          <div>
-            <label className="label" htmlFor="headline">
-              One line about your work
-            </label>
-            <input
-              id="headline"
-              className="field"
-              value={headline}
-              maxLength={HEADLINE_MAX}
-              onChange={(e) => setHeadline(e.target.value)}
-              placeholder="Soroban contracts and the tooling around them"
-            />
-            <p className="mt-1 text-right text-xs text-mute">
-              <span className="num">{headline.trim().length}</span>/
-              {HEADLINE_MAX}
-            </p>
-          </div>
+        {/* -------------------------------------------------- 2 headline */}
+        <div className="p-5">
+          <label className="label" htmlFor="headline">
+            <Step n={2} /> One line about your work
+          </label>
+          <input
+            id="headline"
+            className="field"
+            value={headline}
+            maxLength={HEADLINE_MAX}
+            aria-invalid={tooShort(headline, HEADLINE_MIN) || undefined}
+            onChange={(e) => setHeadline(e.target.value)}
+            placeholder="Soroban contracts and the tooling around them"
+          />
+          <Counter value={headline} min={HEADLINE_MIN} max={HEADLINE_MAX} />
+        </div>
 
-          <div>
-            <label className="label" htmlFor="summary">
-              What have you actually shipped?
-            </label>
-            <textarea
-              id="summary"
-              className="field min-h-28"
-              value={summary}
-              maxLength={SUMMARY_MAX}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="Two or three sentences. Concrete beats broad: what you built, where it runs, what it saved someone."
-            />
-            <p className="mt-1 text-right text-xs text-mute">
-              <span className="num">{summary.trim().length}</span>/{SUMMARY_MAX}
-            </p>
-          </div>
-        </section>
+        {/* --------------------------------------------------- 3 summary */}
+        <div className="p-5">
+          <label className="label" htmlFor="summary">
+            <Step n={3} /> What have you actually shipped?
+          </label>
+          <textarea
+            id="summary"
+            className="field min-h-24"
+            value={summary}
+            maxLength={SUMMARY_MAX}
+            aria-invalid={tooShort(summary, SUMMARY_MIN) || undefined}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="Two or three sentences. Concrete beats broad: what you built, where it runs, what it saved someone."
+          />
+          <Counter value={summary} min={SUMMARY_MIN} max={SUMMARY_MAX} />
+        </div>
 
-        {/* ---------------------------------------------------- the tags */}
-        <section className="card p-5">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="font-semibold">Where you work</h2>
-            <span className="text-xs text-mute">
-              up to <span className="num">{MAX_ECOSYSTEMS}</span>
+        {/* ------------------------------------------------- the optional
+            Behind a disclosure, because neither tags nor links can stop the
+            card from being published — and a required field is easier to find
+            when it is not sitting between two that are not. */}
+        <details className="p-5">
+          <summary className="cursor-pointer font-semibold">
+            Tags and links{" "}
+            <span className="font-normal text-mute">
+              — optional
+              {(ecosystems.length > 0 || cleanLinks.length > 0) && (
+                <>
+                  {" · "}
+                  <span className="num">{ecosystems.length}</span> tag
+                  {ecosystems.length === 1 ? "" : "s"},{" "}
+                  <span className="num">{cleanLinks.length}</span> link
+                  {cleanLinks.length === 1 ? "" : "s"}
+                </>
+              )}
             </span>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          </summary>
+
+          <div className="mt-4 flex flex-wrap gap-2">
             {ECOSYSTEMS.map((e) => {
               const on = ecosystems.includes(e);
               return (
@@ -385,17 +402,12 @@ export default function CardEditor() {
               );
             })}
           </div>
-        </section>
+          <p className="mt-1.5 text-xs text-mute">
+            Up to <span className="num">{MAX_ECOSYSTEMS}</span>. They are the
+            directory’s only filter.
+          </p>
 
-        {/* --------------------------------------------------- the links */}
-        <section className="card p-5">
-          <h2 className="font-semibold">
-            Links{" "}
-            <span className="font-normal text-mute">
-              — optional, up to {MAX_LINKS}
-            </span>
-          </h2>
-          <div className="mt-3 space-y-2">
+          <div className="mt-4 space-y-2">
             {links.map((value, i) => {
               const invalid = value.trim() !== "" && parseLink(value) === null;
               return (
@@ -420,10 +432,10 @@ export default function CardEditor() {
               );
             })}
           </div>
-        </section>
+        </details>
 
         {/* -------------------------------------------------------- save */}
-        <section className="card p-5">
+        <div className="p-5">
           <label className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -444,6 +456,7 @@ export default function CardEditor() {
               className="btn btn-primary btn-lg"
               onClick={save}
               disabled={busy || problem !== null}
+              aria-describedby={problem ? "publish-blocked" : undefined}
             >
               {busy && <span className="spinner" aria-hidden />}
               {busy
@@ -452,7 +465,17 @@ export default function CardEditor() {
                   ? "Save changes"
                   : "Publish my card"}
             </button>
-            <span className="text-sm text-mute">{problem}</span>
+            {/* The reason the button is dead, in the colour of a caution rather
+                than of a caption. In mute grey beside a faded button it read as
+                decoration, and the button read as broken. */}
+            {problem && (
+              <span
+                id="publish-blocked"
+                className="text-sm font-medium text-warn"
+              >
+                {problem}
+              </span>
+            )}
           </div>
 
           {savedAt !== null && (
@@ -493,21 +516,73 @@ export default function CardEditor() {
               {error}
             </p>
           )}
-        </section>
+        </div>
       </div>
 
       {/* ----------------------------------------------------- preview */}
       <aside className="space-y-2 lg:sticky lg:top-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-mute">
-          How people will see you
-        </p>
+        <p className="menu-label">How people will see you</p>
         {preview && <PersonCardView card={preview} preview />}
         <p className="text-xs leading-relaxed text-mute">
           {kindUrlPrefix(kind)}
-          {handle} is the {kindLabel(kind)} tag money is bound to. The card only
-          describes it.
+          {handle} is the tag money is bound to. The card only describes it.
         </p>
       </aside>
     </div>
+  );
+}
+
+/** The step number, so three questions read as three and not as a form. */
+function Step({ n }: { n: number }) {
+  return (
+    <span
+      aria-hidden
+      className="num mr-1.5 inline-grid h-4 w-4 place-items-center rounded-full bg-raised align-[-2px] text-[0.625rem] font-bold text-dim"
+    >
+      {n}
+    </span>
+  );
+}
+
+/** Non-empty but under the minimum — the state worth marking on a field. */
+function tooShort(value: string, min: number): boolean {
+  const n = value.trim().length;
+  return n > 0 && n < min;
+}
+
+/**
+ * The character count, showing whichever limit is in the reader's way.
+ *
+ * "9/1000" is true and useless when the field needs twenty characters: it says
+ * there is room to spare while the publish button sits disabled. So below the
+ * minimum the counter counts up to the MINIMUM, in the caution colour, and only
+ * then goes back to counting down from the maximum.
+ */
+function Counter({
+  value,
+  min,
+  max,
+}: {
+  value: string;
+  min: number;
+  max: number;
+}) {
+  const n = value.trim().length;
+  const short = tooShort(value, min);
+  return (
+    <p
+      className={`mt-1 text-right text-xs ${short ? "text-warn" : "text-mute"}`}
+    >
+      {short ? (
+        <>
+          <span className="num">{n}</span> / <span className="num">{min}</span>{" "}
+          minimum
+        </>
+      ) : (
+        <>
+          <span className="num">{n}</span>/{max}
+        </>
+      )}
+    </p>
   );
 }

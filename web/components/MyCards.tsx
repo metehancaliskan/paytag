@@ -4,21 +4,26 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
 import { useIdentity, identityList } from "./useIdentity";
-import PersonCardView from "./PersonCard";
+import { GithubMark, XMark } from "./icons";
 import { parseLink, type PersonCard } from "@/lib/cards";
 import { isRoleKey } from "@/lib/roles";
-import { kindLabel } from "@/lib/identity";
+import { KIND, slugOf } from "@/lib/identity";
 
 type Mine = { card: PersonCard; published: boolean };
 
 /**
- * Your own cards, on your own profile — drafts included.
+ * Your own cards, in Settings — drafts included.
  *
- * The directory reads `public_cards`, which by design hides an unpublished
- * card from everyone. That makes it the wrong source here: the one reader who
- * must see a draft is its author. So this reads `cards` directly and lets row
- * level security answer — `cards_select_published` allows a row when it is
- * published *or* when it belongs to you.
+ * The directory reads `public_cards`, which by design hides an unpublished card
+ * from everyone. That makes it the wrong source here: the one reader who must
+ * see a draft is its author. So this reads `cards` directly and lets row level
+ * security answer — `cards_select_published` allows a row when it is published
+ * *or* when it belongs to you.
+ *
+ * One row per card, not a rendered preview. In a settings column a card preview
+ * is both too wide and beside the point: what a reader needs here is which
+ * handle, listed or draft, and the way in to edit it. The preview belongs where
+ * the card is actually seen — the dashboard and /p/<kind>/<handle>.
  */
 export default function MyCards() {
   const supabase = useMemo(() => browserSupabase(), []);
@@ -106,40 +111,54 @@ export default function MyCards() {
   if (identity.status !== "verified") return null;
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-lg font-bold tracking-tight">Your cards</h2>
-        <Link className="btn btn-ghost btn-sm" href="/app/submit">
-          {rows && rows.length > 0 ? "Edit" : "Write one"}
-        </Link>
-      </div>
-
+    <div className="space-y-3">
       {rows === null ? (
-        <div className="skeleton h-40 w-full" />
+        <div className="skeleton h-16 w-full" />
       ) : rows.length === 0 ? (
-        <p className="card p-5 text-sm text-mute">
-          No card yet. One role and two fields puts you in the directory — your
+        <p className="text-sm text-mute">
+          No card yet. A role and two fields puts you in the directory — your
           handle is payable either way.
         </p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="card divide-y divide-line">
           {rows.map(({ card, published }) => (
-            <li key={`${card.kind}:${card.handle}`} className="space-y-1.5">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="menu-label">
-                  {kindLabel(card.kind)} · @{card.handle}
-                </span>
-                <span
-                  className={`badge ${published ? "badge-claimed" : "badge-pending"}`}
-                >
-                  {published ? "listed" : "draft"}
-                </span>
-              </div>
-              <PersonCardView card={card} preview />
+            <li
+              key={`${card.kind}:${card.handle}`}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 p-4"
+            >
+              {card.kind === KIND.XUser ? (
+                <XMark size={14} className="shrink-0 text-dim" />
+              ) : (
+                <GithubMark size={16} className="shrink-0 text-dim" />
+              )}
+              <span className="font-semibold">@{card.handle}</span>
+              <span
+                className={`badge ${published ? "badge-claimed" : "badge-pending"}`}
+              >
+                {published ? "listed" : "draft"}
+              </span>
+              <Link
+                className="link ml-auto text-sm"
+                href={`/p/${slugOf(card.kind)}/${card.handle}`}
+              >
+                View
+              </Link>
+              <Link className="btn btn-ghost btn-sm" href="/app/submit">
+                Edit
+              </Link>
+              <p className="w-full truncate text-sm text-mute">
+                {card.headline}
+              </p>
             </li>
           ))}
         </ul>
       )}
-    </section>
+
+      {rows !== null && rows.length < mine.length && (
+        <Link className="btn btn-ghost btn-sm" href="/app/submit">
+          {rows.length === 0 ? "Write one" : "Write the other one"}
+        </Link>
+      )}
+    </div>
   );
 }

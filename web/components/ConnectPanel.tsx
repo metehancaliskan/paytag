@@ -2,183 +2,95 @@
 
 import Link from "next/link";
 import { useIdentity } from "./useIdentity";
-import { CheckMark, GithubMark, XMark } from "./icons";
+import { PROVIDERS } from "./providers";
+import { CheckMark } from "./icons";
 import { describeAuthError } from "@/lib/auth-errors";
-import { KIND, kindUrlPrefix, slugOf, type IdentityKind } from "@/lib/identity";
+import { kindUrlPrefix, slugOf } from "@/lib/identity";
 import { X_ENABLED } from "@/lib/config";
 
 /**
- * Where "Connect GitHub" in the account menu leads.
+ * The accounts section of Settings: one row per provider, connected or not.
  *
- * One job: bind an account to this browser session. It does not show escrow
- * balances or a claim button — /claim does that, and a page that tries to be
- * both ends up explaining itself twice.
+ * It renders rows and nothing else — no card, no heading, no buttons for
+ * things that live elsewhere. The settings page supplies the label and the
+ * frame; this used to carry its own title, its own "Submit yourself" and
+ * "Claim" buttons and a sign-out, which is how a section about *accounts* ended
+ * up being the busiest thing on the page.
  *
- * Two providers, one row each, because they are independent: a person can hold
- * a verified GitHub handle and a verified X handle, and each one has its own
- * escrow. Signing out is one button because the session is one session.
+ * Both providers are always listed. A person can hold one GitHub handle and one
+ * X handle, each with its own escrow, and a row that only appears once you are
+ * already verified cannot tell you the other one exists.
  */
 export default function ConnectPanel({ authError }: { authError?: string }) {
-  const { identity, error, signIn, signOut } = useIdentity();
+  const { identity, error, signIn } = useIdentity();
   const message = error ?? describeAuthError(authError);
 
-  const off = identity.status === "off";
-  const loading = identity.status === "loading";
-  const github = identity.status === "verified" ? identity.github : null;
-  const x = identity.status === "verified" ? identity.x : null;
-  const anySigned = github !== null || x !== null;
-
-  if (off) {
+  if (identity.status === "off") {
     return (
-      <div className="card p-6">
-        <h2 className="text-lg font-bold">Not configured here</h2>
-        <p className="mt-1 text-sm text-mute">
-          This deployment has no Supabase project, so no account can be
-          verified. See <span className="mono">docs/SETUP-AUTH.md</span>.
-        </p>
-      </div>
+      <p className="text-sm text-mute">
+        This deployment has no Supabase project, so no account can be verified.
+        See <span className="mono">docs/SETUP-AUTH.md</span>.
+      </p>
     );
   }
 
+  const loading = identity.status === "loading";
+  const mine = identity.status === "verified" ? identity : null;
+
   return (
-    <div className="space-y-4">
-      <div className="card divide-y divide-line">
-        <Row
-          icon={<GithubMark size={20} />}
-          name="GitHub"
-          kind={KIND.GithubUser}
-          verified={github}
-          loading={loading}
-          available
-          onConnect={() => void signIn("github", "/profile")}
-        />
-        <Row
-          icon={<XMark size={18} />}
-          name="X"
-          kind={KIND.XUser}
-          verified={x}
-          loading={loading}
-          available={X_ENABLED}
-          unavailableNote="Not enabled on this deployment yet — SPEC §7.4."
-          onConnect={() => void signIn("x", "/profile")}
-        />
+    <div className="space-y-3">
+      <ul className="card divide-y divide-line">
+        {PROVIDERS.map((p) => {
+          const verified = mine ? mine[p.key] : null;
+          const usable = p.key !== "x" || X_ENABLED;
 
-        {anySigned && (
-          <div className="flex flex-wrap items-center gap-3 p-4">
-            <Link className="btn btn-primary" href="/app/submit">
-              Submit yourself
-            </Link>
-            <Link className="btn btn-ghost" href="/claim">
-              Claim your escrow
-            </Link>
-            <button
-              className="btn btn-quiet ml-auto"
-              onClick={() => void signOut()}
+          return (
+            <li
+              key={p.key}
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4"
             >
-              Sign out
-            </button>
-          </div>
-        )}
+              {p.icon}
 
-        {message && (
-          <p role="alert" className="p-4 text-sm text-danger">
-            {message}
-          </p>
-        )}
-      </div>
+              {loading ? (
+                <div className="skeleton h-5 w-40" />
+              ) : verified ? (
+                <>
+                  <Link
+                    className="min-w-0 font-semibold hover:underline"
+                    href={`/p/${slugOf(verified.kind)}/${verified.handle}`}
+                  >
+                    {kindUrlPrefix(verified.kind)}
+                    {verified.handle}
+                  </Link>
+                  <span className="badge badge-claimed ml-auto shrink-0">
+                    <CheckMark />
+                    verified
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-mute">{p.label}</span>
+                  <button
+                    className="btn btn-ghost btn-sm ml-auto"
+                    onClick={() => void signIn(p.key, "/profile")}
+                    disabled={!usable}
+                    title={
+                      usable ? undefined : "Not enabled on this deployment yet"
+                    }
+                  >
+                    Connect
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
 
-      {!anySigned && !loading && (
-        <ul className="grid gap-3 text-sm text-mute sm:grid-cols-3">
-          <li className="card p-4">
-            <span className="badge">reads</span>
-            <p className="mt-2">Username and account id.</p>
-          </li>
-          <li className="card p-4">
-            <span className="badge">never</span>
-            <p className="mt-2">Code, posts, wallet keys.</p>
-          </li>
-          <li className="card p-4">
-            <span className="badge">then</span>
-            <p className="mt-2">You pick the wallet.</p>
-          </li>
-        </ul>
-      )}
-
-      {anySigned && (
-        <p className="text-xs text-mute">
-          Each identity holds its own escrow and its own card.
+      {message && (
+        <p role="alert" className="text-sm text-danger">
+          {message}
         </p>
-      )}
-    </div>
-  );
-}
-
-function Row({
-  icon,
-  name,
-  kind,
-  verified,
-  loading,
-  available,
-  unavailableNote,
-  onConnect,
-}: {
-  icon: React.ReactNode;
-  name: string;
-  kind: IdentityKind;
-  verified: { handle: string } | null;
-  loading: boolean;
-  available: boolean;
-  unavailableNote?: string;
-  onConnect: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
-      <span
-        aria-hidden
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-raised"
-      >
-        {icon}
-      </span>
-
-      <div className="min-w-0 flex-1">
-        {loading ? (
-          <div className="skeleton h-5 w-40" />
-        ) : verified ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold">@{verified.handle}</span>
-              <span className="badge badge-claimed">
-                <CheckMark />
-                verified
-              </span>
-            </div>
-            <Link
-              className="text-xs text-mute hover:text-text"
-              href={`/p/${slugOf(kind)}/${verified.handle}`}
-            >
-              {kindUrlPrefix(kind)}
-              {verified.handle} →
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className="font-semibold">{name}</p>
-            <p className="text-xs text-mute">
-              {available ? "Proves the handle is yours." : unavailableNote}
-            </p>
-          </>
-        )}
-      </div>
-
-      {!loading && !verified && (
-        <button
-          className="btn btn-ghost"
-          onClick={onConnect}
-          disabled={!available}
-        >
-          Connect
-        </button>
       )}
     </div>
   );

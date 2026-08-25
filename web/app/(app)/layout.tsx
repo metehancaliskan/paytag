@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import WalletBar from "@/components/WalletBar";
 import Logo from "@/components/Logo";
+import { Sliders } from "@/components/icons";
 import { NETWORK } from "@/lib/config";
 
 /**
@@ -42,7 +43,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             ))}
           </nav>
 
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {/* Settings is a destination, not a menu item hidden inside the
+                account chip. Everything personal lives on one page, so the way
+                to it is on every page. */}
+            <Link
+              href="/profile"
+              aria-label="Settings"
+              title="Settings"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-surface text-mute transition-colors hover:border-line-strong hover:text-text"
+            >
+              <Sliders />
+            </Link>
             <WalletBar />
           </div>
         </div>

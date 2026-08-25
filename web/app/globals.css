@@ -217,8 +217,16 @@ body {
     transition: background-color 120ms ease;
   }
 
-  .menu-item:hover {
+  .menu-item:hover:not(:disabled) {
     background: var(--raised);
+  }
+
+  /* A row for something this deployment cannot do — X sign-in where no X app is
+     configured. Shown rather than hidden: a menu that silently omits half the
+     product teaches nobody that the half exists. */
+  .menu-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 
   .menu-label {

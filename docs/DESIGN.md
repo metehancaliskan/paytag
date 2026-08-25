@@ -96,7 +96,19 @@ the surface, not for the truth.
 | `/` landing | Explain it in ten seconds | **App →** |
 | `/app` dashboard | Who can be paid | A card's `$5 · $10 · $25`, or the **+** tile |
 | `/app/submit` | Say what you do | **Publish my card** |
-| `/profile` | Your handles, where they pay, your cards, the way out | Connect, or **Claim** |
+| `/profile` Settings | Your handles, where they pay, your cards, the way out | Connect, or **Delete** |
+
+Settings is reachable from every screen — a sliders icon beside the account
+chip, not only a row inside a dropdown. Anything a person might want to change
+about themselves is on that one page, in four labelled sections, ordered by
+dependency: an identity, then where it pays, then what it says, then leaving.
+
+A form is ONE card. `/app/submit` was five stacked panels, which made a
+two-minute form look like a registration process and hid the two required
+fields among three optional ones. Now: three numbered questions, everything
+optional behind one disclosure that says what is inside it (`— optional · 3
+tags, 2 links`), then the button. If a field cannot block the submit, it does
+not get to occupy the first screen.
 
 The dashboard's first grid cell is always the dashed **+** tile. It reads as an
 empty seat at the table: whatever the filters say, there is a place for you.

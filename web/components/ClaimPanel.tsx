@@ -3,13 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "./WalletProvider";
-import {
-  useIdentity,
-  identityList,
-  PROVIDER_KIND,
-  type ProviderKey,
-} from "./useIdentity";
+import { useIdentity, identityList } from "./useIdentity";
 import { usePayout } from "./usePayout";
+import { PROVIDERS } from "./providers";
 import CopyButton from "./CopyButton";
 import { GithubMark, XMark } from "./icons";
 import { describeAuthError } from "@/lib/auth-errors";
@@ -37,18 +33,6 @@ import {
   explorerTx,
   tokenByContractId,
 } from "@/lib/config";
-
-/**
- * The two providers, in the order they appear everywhere else.
- *
- * Kept beside the claim flow rather than in `useIdentity` because the icon is
- * JSX; the mapping from provider to identity kind lives there, where the rest
- * of the identity rules are.
- */
-const PROVIDERS: { key: ProviderKey; label: string; icon: React.ReactNode }[] = [
-  { key: "github", label: "GitHub", icon: <GithubMark size={14} /> },
-  { key: "x", label: "X", icon: <XMark size={12} /> },
-];
 
 export default function ClaimPanel({
   hintHandle,
@@ -84,7 +68,7 @@ export default function ClaimPanel({
   // not a finish: the other one may have money waiting that this session cannot
   // even see.
   const missing = PROVIDERS.filter(
-    (p) => !mine.some((v) => v.kind === PROVIDER_KIND[p.key]),
+    (p) => !mine.some((v) => v.kind === p.kind),
   );
 
   const [payments, setPayments] = useState<Payment[] | null>(null);

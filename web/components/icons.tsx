@@ -76,6 +76,30 @@ export function ChevronDown({ className, size = 14 }: IconProps) {
   );
 }
 
+/**
+ * Settings. Sliders rather than a gear: two strokes and two knobs carry the
+ * meaning at 16px, where a gear's teeth turn into a grey blob.
+ */
+export function Sliders({ className, size = 17 }: IconProps) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className={className}
+    >
+      <path d="M3 8h4M13 8h8M3 16h8M17 16h4" />
+      <circle cx="10" cy="8" r="2.6" />
+      <circle cx="14" cy="16" r="2.6" />
+    </svg>
+  );
+}
+
 export function CheckMark({ className, size = 12 }: IconProps) {
   return (
     <svg

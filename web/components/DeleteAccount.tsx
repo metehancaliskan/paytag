@@ -69,23 +69,18 @@ export default function DeleteAccount() {
 
   if (!open) {
     return (
-      <div className="flex flex-wrap items-center gap-3 border-t border-line pt-6">
-        <p className="text-sm text-mute">Done with Paytag?</p>
-        <button
-          className="btn btn-quiet btn-sm ml-auto text-danger"
-          onClick={() => setOpen(true)}
-        >
-          Delete my account
-        </button>
-      </div>
+      <button
+        className="btn btn-ghost btn-sm text-danger"
+        onClick={() => setOpen(true)}
+      >
+        Delete my account
+      </button>
     );
   }
 
   return (
     <section className="card border-danger/40 p-5">
-      <h2 className="font-semibold text-danger">Delete my account</h2>
-
-      <ul className="mt-3 space-y-1.5 text-sm text-dim">
+      <ul className="space-y-1.5 text-sm text-dim">
         <li>
           <span className="font-semibold text-text">@{target}</span> is released
           — anyone can verify it after you.

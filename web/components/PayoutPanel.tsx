@@ -125,16 +125,9 @@ export default function PayoutPanel() {
   }
 
   return (
-    <section className="card p-5">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-semibold">Payout wallet</h2>
-        <p className="text-xs text-mute">
-          Where a claim pays. Empty means the wallet you connect.
-        </p>
-      </div>
-
+    <section>
       {rows !== null && rows.length > 1 && (
-        <div className="segmented mt-4">
+        <div className="segmented">
           {rows.map((r, i) => (
             <button
               key={r.identityId}
@@ -153,13 +146,13 @@ export default function PayoutPanel() {
       )}
 
       {failed ? (
-        <p className="mt-4 text-sm text-danger">
+        <p className="mt-3 text-sm text-danger first:mt-0">
           Could not read your payout setting. Reload the page.
         </p>
       ) : row === null ? (
-        <div className="skeleton mt-4 h-9 w-64" />
+        <div className="skeleton mt-3 h-9 w-64 first:mt-0" />
       ) : editing ? (
-        <div className="mt-4 space-y-3">
+        <div className="mt-3 space-y-3 first:mt-0">
           <label className="block">
             <span className="sr-only">Payout address for @{row.handle}</span>
             <input
@@ -209,7 +202,7 @@ export default function PayoutPanel() {
           )}
         </div>
       ) : (
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 first:mt-0">
           {row.saved ? (
             <>
               <span className="badge badge-claimed">locked</span>

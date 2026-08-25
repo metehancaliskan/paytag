@@ -3,33 +3,31 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "./WalletProvider";
-import { useIdentity, identityList } from "./useIdentity";
+import { useIdentity, identityList, PROVIDER_KIND } from "./useIdentity";
+import { PROVIDERS } from "./providers";
 import CopyButton from "./CopyButton";
-import {
-  CheckMark,
-  ChevronDown,
-  ChevronRight,
-  GithubMark,
-  XMark,
-} from "./icons";
+import { CheckMark, ChevronDown, ChevronRight, GithubMark } from "./icons";
 import { tokenBalance } from "@/lib/contract";
 import { fromUnits, shortAddr } from "@/lib/format";
-import { DEFAULT_TOKEN, explorerAccount } from "@/lib/config";
-import { KIND } from "@/lib/identity";
+import { DEFAULT_TOKEN, X_ENABLED, explorerAccount } from "@/lib/config";
 
 /**
  * The account menu.
  *
- * It carries two unrelated things — a wallet (where money goes) and a GitHub
- * identity (who is allowed to take it) — so they are kept as two labelled
- * sections rather than one list of buttons. Mixing them was the old layout's
- * problem: "Disconnect" and "Sign out" sat side by side meaning different
- * things.
+ * It carries two unrelated things — a wallet (where money goes) and the
+ * identities (who is allowed to take it) — so they stay two sections with a
+ * rule between them. Mixing them was the old layout's problem: "Disconnect"
+ * and "Sign out" sat side by side meaning entirely different things.
+ *
+ * Both providers are listed whether or not they are connected, and the row for
+ * an unconnected one starts OAuth from here. Everything else about the account
+ * — the payout address, the cards, deleting it — is one link away under
+ * Settings, because a dropdown is a place for two actions, not for settings.
  */
 export default function WalletBar() {
   const { address, installed, connecting, error, mismatch, connect, disconnect } =
     useWallet();
-  const { identity } = useIdentity();
+  const { identity, signIn } = useIdentity();
   // Both verified handles, GitHub first. A person can hold one of each.
   const mine = identityList(identity);
 
@@ -146,7 +144,12 @@ export default function WalletBar() {
             {shown.balance} {symbol}
           </span>
         )}
-        <span className="mono text-dim">{shortAddr(address)}</span>
+        {/* On a phone the balance and the address together wrap the chip onto
+            two lines. The balance is the number worth a glance; the address is
+            one tap away inside the menu. */}
+        <span className="mono hidden text-dim sm:inline">
+          {shortAddr(address)}
+        </span>
         {identity.status === "verified" && (
           <span
             title={mine.map((v) => `@${v.handle}`).join(" · ")}
@@ -160,30 +163,12 @@ export default function WalletBar() {
 
       {open && (
         <div role="menu" className="menu absolute right-0 z-20 mt-2 w-80">
-          {/* ------------------------------------------------ identity */}
-          {identity.status === "verified" ? (
-            // Links, not labels: signing out lives on /profile, and these are
-            // the rows a reader looking for it will press.
-            mine.map((v) => (
-              <Link
-                key={v.identityHex}
-                href="/profile"
-                className="menu-item"
-                onClick={() => setOpen(false)}
-              >
-                {v.kind === KIND.XUser ? (
-                  <XMark size={16} className="text-dim" />
-                ) : (
-                  <GithubMark className="text-dim" />
-                )}
-                <span className="truncate font-semibold">@{v.handle}</span>
-                <span className="badge badge-claimed ml-auto shrink-0">
-                  <CheckMark />
-                  verified
-                </span>
-              </Link>
-            ))
-          ) : identity.status === "loading" ? (
+          {/* ------------------------------------------------ identity
+              Both providers, always, connected or not. Listing only what is
+              already verified hid the other half of the product: money can be
+              waiting for an X handle, and a menu that never mentions X is a
+              menu that never says so. */}
+          {identity.status === "loading" ? (
             <div className="menu-row">
               <div className="skeleton h-4 w-36" />
             </div>
@@ -192,38 +177,65 @@ export default function WalletBar() {
               Identity verification is not configured here.
             </p>
           ) : (
-            <Link
-              href="/profile"
-              className="menu-item"
-              onClick={() => setOpen(false)}
-            >
-              <GithubMark className="text-dim" />
-              <span className="min-w-0">
-                <span className="block font-semibold">Connect an account</span>
-                <span className="block text-xs text-mute">
-                  GitHub or X — needed to claim what is paid to you
-                </span>
-              </span>
-              <ChevronRight className="ml-auto shrink-0 text-mute" />
-            </Link>
+            PROVIDERS.map((p) => {
+              const v = mine.find((m) => m.kind === PROVIDER_KIND[p.key]);
+              const usable = p.key !== "x" || X_ENABLED;
+
+              return v ? (
+                <Link
+                  key={p.key}
+                  href="/profile"
+                  className="menu-item"
+                  onClick={() => setOpen(false)}
+                >
+                  {p.icon}
+                  <span className="truncate font-semibold">@{v.handle}</span>
+                  <CheckMark
+                    size={12}
+                    className="ml-auto shrink-0 text-accent-text"
+                  />
+                </Link>
+              ) : (
+                <button
+                  key={p.key}
+                  type="button"
+                  className="menu-item"
+                  disabled={!usable}
+                  title={usable ? undefined : "X sign-in is not enabled here"}
+                  onClick={() => {
+                    setOpen(false);
+                    void signIn(p.key, "/profile");
+                  }}
+                >
+                  {p.icon}
+                  <span className="text-mute">Connect {p.label}</span>
+                  <ChevronRight className="ml-auto shrink-0 text-mute" />
+                </button>
+              );
+            })
           )}
 
-          {identity.status === "verified" && (
+          {identity.status !== "off" && (
             <>
+              <div className="menu-sep" />
+              {identity.status === "verified" && (
+                <Link
+                  href="/claim"
+                  className="menu-item"
+                  onClick={() => setOpen(false)}
+                >
+                  Claim your escrow
+                  <ChevronRight className="ml-auto shrink-0 text-mute" />
+                </Link>
+              )}
+              {/* Everything else about the account is one page, and this is the
+                  way to it — the menu holds the two actions, not the settings. */}
               <Link
-                href="/app/submit"
+                href="/profile"
                 className="menu-item"
                 onClick={() => setOpen(false)}
               >
-                Your card
-                <ChevronRight className="ml-auto shrink-0 text-mute" />
-              </Link>
-              <Link
-                href="/claim"
-                className="menu-item"
-                onClick={() => setOpen(false)}
-              >
-                Claim your escrow
+                Settings
                 <ChevronRight className="ml-auto shrink-0 text-mute" />
               </Link>
             </>
@@ -231,19 +243,15 @@ export default function WalletBar() {
 
           <div className="menu-sep" />
 
-          {/* -------------------------------------------------- wallet */}
+          {/* -------------------------------------------------- wallet
+              The address short rather than all 56 characters: the full one is
+              in the clipboard a click away, and printing it here was most of
+              the height of this menu. */}
           <div className="menu-row justify-between">
             <span className="menu-label">Wallet</span>
-            {shown && (
-              <span className="num text-base font-bold text-accent-text">
-                {shown.balance}{" "}
-                <span className="text-xs font-semibold text-dim">{symbol}</span>
-              </span>
-            )}
-          </div>
-
-          <div className="mx-1 rounded-lg border border-line bg-raised px-2.5 py-2">
-            <p className="mono text-dim">{address}</p>
+            {/* No balance here: the button that opened this menu is already
+                showing it, and repeating a number is how a panel gets tall. */}
+            <span className="mono text-dim">{shortAddr(address)}</span>
           </div>
 
           {mismatch && (
@@ -252,14 +260,14 @@ export default function WalletBar() {
             </p>
           )}
 
-          <div className="mb-0.5 mt-1.5 flex items-center gap-1 px-1">
+          <div className="mb-0.5 flex items-center gap-1 px-1">
             <CopyButton
               value={address}
               label="Copy"
-              className="btn btn-ghost btn-sm"
+              className="btn btn-quiet btn-sm"
             />
             <a
-              className="btn btn-ghost btn-sm"
+              className="btn btn-quiet btn-sm"
               href={explorerAccount(address)}
               target="_blank"
               rel="noreferrer"
