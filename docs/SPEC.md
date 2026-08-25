@@ -692,15 +692,47 @@ other half: a place where the people worth paying say who they are.
 
 ### 8.1 Three kinds of user, two kinds of card
 
-| User | Shown as | What they do here | Card? |
-|---|---|---|---|
-| Sender | *Sender* | Browses, picks somebody, sends. | No |
-| `shiller` | *Community* | Threads, posts, explainers, spaces. | Yes |
-| `dev` | *Developer* | Contracts, tools, SDKs, docs, fixes. | Yes |
+| User | Shown as | Comes from | What they do here | Card? |
+|---|---|---|---|---|
+| Sender | *Sender* | — | Browses, picks somebody, sends. | No |
+| `shiller` | *Community* | an X handle | Threads, posts, spaces. | Yes |
+| `dev` | *Developer* | a GitHub handle | Contracts, tools, SDKs, docs. | Yes |
 
-The middle column is the label, and it is deliberately not the key. `shiller`
-is what `cards.role` stores and what `?role=` filters on; *Community* is what
-the chip says. Renaming the stored value to match would cost a migration, a
+**The role is the platform.** Column three is the whole rule, and it is not a
+default the writer can override: `roleForKind()` in `lib/roles.ts` maps kind
+`0x00` → `dev` and `0x02` → `shiller`, and that is the only thing that ever
+decides a role.
+
+The form used to ask "What do you do?" as question two. It was a question with
+one answer — somebody who has just signed in with GitHub has already said they
+build — and it made two things possible that should not be: being listed as a
+Developer on the strength of an X account, and two directory filters (*role* and
+*platform*) that selected identical rows while `?role=dev&on=x` selected none.
+
+Three consequences, all of them deliberate:
+
+- **The role is written AND derived.** `cards.role` is still filled in, because
+  a column that already holds the answer makes reversing this decision a
+  one-line change rather than a migration. But every badge renders
+  `roleForKind(card.kind)`, not the stored value, so a row written before the
+  rule existed is displayed correctly without touching the database.
+- **The directory has one filter.** `?on=gh|x`. A legacy `?role=` link is
+  resolved to its platform (`kindForRole`) so shared links keep working, and the
+  chips are labelled by role with the platform's mark beside them — the same
+  distinction said once instead of twice.
+- **The tile that picks the handle states the role.** The reader finds out how
+  they will be listed before writing a word, which is the trade for not being
+  asked. A derivation nobody is shown is just a hidden decision.
+
+The honest cost: a GitHub account held by somebody who mostly writes threads is
+listed as a Developer. That is accepted rather than solved, because the
+alternative is an unverifiable self-declaration — the platform is at least a
+thing the product checked (§4). If it ever needs solving, the column is already
+there.
+
+The *Shown as* column is the label, and it is deliberately not the key.
+`shiller`
+is what `cards.role` stores; *Community* is what the chip says. Renaming the stored value to match would cost a migration, a
 rewritten check constraint and every shared `?role=shiller` link, to change a
 word that only appears in this repository. The person who only sends is called
 *Sender* on the landing page for the same reason the other one is not: one word

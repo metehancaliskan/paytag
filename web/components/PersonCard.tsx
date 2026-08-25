@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { avatarUrl, cardPath, type PersonCard } from "@/lib/cards";
 import { KIND, kindUrlPrefix } from "@/lib/identity";
-import { ROLES } from "@/lib/roles";
+import { ROLES, roleForKind } from "@/lib/roles";
 import { GithubMark, XMark } from "./icons";
 
 /**
@@ -30,7 +30,11 @@ export default function PersonCardView({
   /** Preview mode drops the link, so clicking inside the editor goes nowhere. */
   preview?: boolean;
 }) {
-  const role = card.role ? ROLES[card.role] : null;
+  // From the platform, not from the stored column. The role IS the platform
+  // now (lib/roles.ts), and a row written before that rule existed can still
+  // hold the other value — a card badged "Community" over a github.com handle
+  // would be the only thing on the page contradicting itself.
+  const role = ROLES[roleForKind(card.kind)];
   const avatar = avatarUrl(card);
   const name = card.displayName ?? card.handle;
 
@@ -63,7 +67,7 @@ export default function PersonCardView({
               <GithubMark size={14} className="shrink-0 text-mute" />
             )}
             <h3 className="truncate font-semibold">{name}</h3>
-            {role && <span className="badge shrink-0">{role.label}</span>}
+            <span className="badge shrink-0">{role.label}</span>
           </div>
           <p className="mono truncate text-mute">
             {kindUrlPrefix(card.kind)}
@@ -155,13 +159,17 @@ export default function PersonCardView({
  * links, no clamping. The directory row is a teaser; this is the thing itself.
  */
 export function PersonCardDetail({ card }: { card: PersonCard }) {
-  const role = card.role ? ROLES[card.role] : null;
+  // From the platform, not from the stored column. The role IS the platform
+  // now (lib/roles.ts), and a row written before that rule existed can still
+  // hold the other value — a card badged "Community" over a github.com handle
+  // would be the only thing on the page contradicting itself.
+  const role = ROLES[roleForKind(card.kind)];
 
   return (
     <div className="card p-5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="badge badge-claimed">verified</span>
-        {role && <span className="badge">{role.label}</span>}
+        <span className="badge">{role.label}</span>
       </div>
 
       {card.headline && (

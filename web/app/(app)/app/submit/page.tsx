@@ -33,9 +33,12 @@ export default async function SubmitPage({
         <h1 className="mt-3 text-3xl font-bold tracking-tight">
           Submit yourself
         </h1>
+        {/* Two fields, not three: the role is not typed any more, it comes with
+            the handle. A subtitle that still promised "a role" was counting a
+            question the form no longer asks. */}
         <p className="mt-2 max-w-xl text-dim">
-          One handle, a role and two fields. It puts you in the list, where
-          people pay that handle.
+          Pick a handle, fill two fields. It puts you in the list, where people
+          pay that handle.
         </p>
       </div>
 

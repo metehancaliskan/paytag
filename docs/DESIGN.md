@@ -117,7 +117,7 @@ the surface, not for the truth.
 |---|---|---|
 | `/` landing | Explain it in ten seconds | **App →** |
 | `/app` dashboard | Who can be paid | A card's `$5 · $10 · $25`, or the **+** tile |
-| `/app/submit` | Say what you do | **Publish my card** |
+| `/app/submit` | Say what you shipped, under one handle | **Publish my card** |
 | `/profile` Settings | Your handles, where they pay, your cards, the way out | Connect, or **Delete** |
 
 Settings is reachable from every screen — a sliders icon beside the account
@@ -127,7 +127,7 @@ dependency: an identity, then where it pays, then what it says, then leaving.
 
 A form is ONE card. `/app/submit` was five stacked panels, which made a
 two-minute form look like a registration process and hid the two required
-fields among three optional ones. Now: four numbered questions, everything
+fields among three optional ones. Now: three numbered questions, everything
 optional behind one disclosure that says what is inside it (`— optional · 3
 tags, 2 links`), then the button. If a field cannot block the submit, it does
 not get to occupy the first screen.
@@ -139,6 +139,18 @@ verified or not. Pick the one you have not proven and the form is replaced by a
 single Connect row; you come back to the same question already answered. A form
 that sends people to Settings for a credential it needs, and hopes they return,
 is a form people do not finish.
+
+**A question with one answer is not a question.** "What do you do?" used to be
+question two, asked of somebody who had just answered it by signing in with
+GitHub. It is gone: the role comes from the platform (`roleForKind`), and the
+tile that picks the handle prints it — `Developer · verified`, and the line that
+says what that means. The rule for the next one of these: if the reader's
+previous answer determines this field, derive it and *show* it. Deriving
+silently is worse than asking, because then nobody knows how they got listed.
+
+The same collapse applied to the directory: two filter rows, *role* and
+*platform*, were selecting identical rows. One row now, labelled by role with
+the platform's mark beside it.
 
 The dashboard's first grid cell is always the dashed **+** tile. It reads as an
 empty seat at the table: whatever the filters say, there is a place for you.

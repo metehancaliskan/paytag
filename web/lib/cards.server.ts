@@ -2,7 +2,6 @@ import "server-only";
 
 import { serverSupabase } from "./supabase/server";
 import { CARD_COLUMNS, toPersonCard, type PersonCard } from "./cards";
-import { isRoleKey, type RoleKey } from "./roles";
 import { KIND, type IdentityKind } from "./identity";
 
 /**
@@ -21,7 +20,11 @@ import { KIND, type IdentityKind } from "./identity";
  */
 
 export async function listCards(
-  filter: { role?: RoleKey | null; kind?: IdentityKind | null } = {},
+  // Filtered by platform only. There used to be a `role` filter beside it, and
+  // it selected exactly the same rows: the role is the platform (lib/roles.ts).
+  // The dashboard resolves a legacy `?role=` link to its platform before
+  // calling, so nothing here needs to know both words for one thing.
+  filter: { kind?: IdentityKind | null } = {},
   limit = 60,
 ): Promise<PersonCard[]> {
   const sb = await serverSupabase();
@@ -34,7 +37,6 @@ export async function listCards(
     .order("updated_at", { ascending: false })
     .limit(limit);
 
-  if (isRoleKey(filter.role)) q = q.eq("role", filter.role);
   if (filter.kind === KIND.GithubUser || filter.kind === KIND.XUser) {
     q = q.eq("kind", filter.kind);
   }
@@ -64,39 +66,32 @@ export async function getCard(
 }
 
 /**
- * How many people are listed, split both ways.
+ * How many people are listed, per platform.
  *
- * One query rather than four: the filter needs every count at once, and asking
- * the database five times to draw one row of chips is how a directory starts
- * feeling slow. The rows are tiny — two columns, one per listed card.
+ * One query rather than three: the filter needs every count at once, and asking
+ * the database three times to draw one row of chips is how a directory starts
+ * feeling slow. The rows are tiny — one column, one per listed card.
  */
 export type DirectoryCounts = {
   total: number;
-  role: Record<RoleKey, number>;
   kind: Record<"github" | "x", number>;
 };
 
 export async function countCards(): Promise<DirectoryCounts> {
-  const zero: DirectoryCounts = {
-    total: 0,
-    role: { shiller: 0, dev: 0 },
-    kind: { github: 0, x: 0 },
-  };
+  const zero: DirectoryCounts = { total: 0, kind: { github: 0, x: 0 } };
   const sb = await serverSupabase();
   if (!sb) return zero;
 
   const { data, error } = await sb
     .from("public_cards")
-    .select("role, kind")
+    .select("kind")
     .eq("has_card", true);
 
   if (error || !data) return zero;
 
   for (const row of data) {
-    const r = (row as { role?: unknown }).role;
     const k = (row as { kind?: unknown }).kind;
     zero.total += 1;
-    if (isRoleKey(r)) zero.role[r] += 1;
     if (k === KIND.GithubUser) zero.kind.github += 1;
     if (k === KIND.XUser) zero.kind.x += 1;
   }

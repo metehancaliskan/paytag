@@ -24,11 +24,10 @@ import {
   HEADLINE_MAX,
   HEADLINE_MIN,
   MAX_ECOSYSTEMS,
-  ROLE_LIST,
+  ROLES,
   SUMMARY_MAX,
   SUMMARY_MIN,
-  isRoleKey,
-  type RoleKey,
+  roleForKind,
 } from "@/lib/roles";
 
 type Loaded = {
@@ -36,7 +35,6 @@ type Loaded = {
   profileId: string;
   /** Null when this person has no card yet. */
   existing: {
-    role: RoleKey | null;
     headline: string;
     summary: string;
     ecosystems: string[];
@@ -80,7 +78,6 @@ export default function CardEditor({
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
-  const [role, setRole] = useState<RoleKey | null>(null);
   const [headline, setHeadline] = useState("");
   const [summary, setSummary] = useState("");
   const [ecosystems, setEcosystems] = useState<string[]>([]);
@@ -112,6 +109,9 @@ export default function CardEditor({
     picked ?? hintKind ?? mine[0]?.kind ?? KIND.GithubUser;
   const chosen = mine.find((v) => v.kind === kind) ?? null;
   const handle = chosen?.handle ?? null;
+  // Not asked, derived. Signing in with GitHub already said "I build"; asking
+  // it again is a question with one answer. `lib/roles.ts` holds the rule.
+  const role = ROLES[roleForKind(kind)];
 
   // Load the identity row and any card already on it. Both reads are ordinary
   // authenticated reads: `identities` is world readable, and RLS on `cards`
@@ -135,7 +135,7 @@ export default function CardEditor({
 
         const { data: card } = await supabase
           .from("cards")
-          .select("role, headline, summary, ecosystems, links, published")
+          .select("headline, summary, ecosystems, links, published")
           .eq("identity_id", id.id)
           .maybeSingle();
 
@@ -143,7 +143,6 @@ export default function CardEditor({
 
         const existing = card
           ? {
-              role: isRoleKey(card.role) ? card.role : null,
               headline: typeof card.headline === "string" ? card.headline : "",
               summary: typeof card.summary === "string" ? card.summary : "",
               ecosystems: Array.isArray(card.ecosystems)
@@ -167,7 +166,6 @@ export default function CardEditor({
         // Also resets when there is no card for this identity: switching from a
         // filled GitHub card to an empty X one must not leave the old text in
         // the form and quietly save it under the other handle.
-        setRole(existing?.role ?? null);
         setHeadline(existing?.headline ?? "");
         setSummary(existing?.summary ?? "");
         setEcosystems(existing?.ecosystems ?? []);
@@ -201,9 +199,7 @@ export default function CardEditor({
   const cleanLinks = links.map(parseLink).filter((l) => l !== null);
   const badLink = links.some((l) => l.trim() !== "" && parseLink(l) === null);
   const problem =
-    role === null
-      ? "Pick what you do."
-      : headline.trim().length < HEADLINE_MIN
+    headline.trim().length < HEADLINE_MIN
         ? "The headline is too short."
         : headline.trim().length > HEADLINE_MAX
           ? "The headline is too long."
@@ -221,7 +217,7 @@ export default function CardEditor({
         handle,
         identityKey: "",
         displayName: null,
-        role,
+        role: role.key,
         headline: headline.trim() || null,
         summary: summary.trim() || null,
         ecosystems,
@@ -244,7 +240,7 @@ export default function CardEditor({
         {
           identity_id: loaded.identityId,
           profile_id: loaded.profileId,
-          role,
+          role: role.key,
           headline: headline.trim(),
           summary: summary.trim(),
           ecosystems,
@@ -318,6 +314,7 @@ export default function CardEditor({
               const v = mine.find((m) => m.kind === p.kind) ?? null;
               const on = p.kind === kind;
               const allowed = p.key !== "x" || X_ENABLED;
+              const implied = ROLES[roleForKind(p.kind)];
               return (
                 <button
                   key={p.key}
@@ -341,12 +338,23 @@ export default function CardEditor({
                       {v ? `/${v.handle}` : ""}
                     </span>
                   </span>
+                  {/* The role the platform implies, on the tile that chooses
+                      it. The form no longer asks, so this is where the reader
+                      finds out how they will be listed — before they write a
+                      word, not after they publish. */}
                   <span className="mt-0.5 block text-xs text-mute">
+                    <span className="font-semibold text-dim">
+                      {implied.label}
+                    </span>{" "}
+                    ·{" "}
                     {!allowed
                       ? "not enabled here"
                       : v
                         ? "verified"
                         : "needs signing in"}
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed text-mute">
+                    {implied.blurb}
                   </span>
                 </button>
               );
@@ -402,37 +410,15 @@ export default function CardEditor({
           </div>
         ) : (
           <>
-        {/* ------------------------------------------------------ 2 role */}
-        <fieldset className="p-5">
-          <legend className="label">
-            <Step n={2} /> What do you do?
-          </legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {ROLE_LIST.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                aria-pressed={role === r.key}
-                onClick={() => setRole(r.key)}
-                className={`rounded-xl border p-3 text-left transition-colors ${
-                  role === r.key
-                    ? "border-accent bg-raised"
-                    : "border-line hover:border-line-strong"
-                }`}
-              >
-                <span className="block font-semibold">{r.pick}</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-mute">
-                  {r.blurb}
-                </span>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        {/* -------------------------------------------------- 3 headline */}
+        {/* -------------------------------------------------- 2 headline
+            "What do you do?" used to be question two, and it was a question
+            with one answer: somebody who signs in with GitHub has already said
+            they build. The role comes from the platform now (lib/roles.ts) and
+            is printed on the tile above, so the form asks two things instead of
+            three. */}
         <div className="p-5">
           <label className="label" htmlFor="headline">
-            <Step n={3} /> One line about your work
+            <Step n={2} /> One line about your work
           </label>
           <input
             id="headline"
@@ -446,10 +432,10 @@ export default function CardEditor({
           <Counter value={headline} min={HEADLINE_MIN} max={HEADLINE_MAX} />
         </div>
 
-        {/* --------------------------------------------------- 4 summary */}
+        {/* --------------------------------------------------- 3 summary */}
         <div className="p-5">
           <label className="label" htmlFor="summary">
-            <Step n={4} /> What have you actually shipped?
+            <Step n={3} /> What have you actually shipped?
           </label>
           <textarea
             id="summary"

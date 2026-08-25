@@ -3,7 +3,7 @@ import Link from "next/link";
 import PersonCardView from "@/components/PersonCard";
 import { GithubMark, XMark } from "@/components/icons";
 import { listCards, countCards } from "@/lib/cards.server";
-import { ROLE_LIST, isRoleKey, type RoleKey } from "@/lib/roles";
+import { ROLES, isRoleKey, kindForRole, roleForKind } from "@/lib/roles";
 import { KIND, type IdentityKind } from "@/lib/identity";
 
 export const metadata: Metadata = {
@@ -24,28 +24,25 @@ export default async function Dashboard({
   searchParams: Promise<{ role?: string; on?: string; deleted?: string }>;
 }) {
   const { role: rawRole, on: rawOn, deleted } = await searchParams;
-  const role: RoleKey | null = isRoleKey(rawRole) ? rawRole : null;
-  const kind: IdentityKind | null = rawOn ? (PLATFORM[rawOn] ?? null) : null;
-  const on = kind === null ? null : rawOn!;
+
+  // ONE filter, because there was only ever one fact. The role is the platform
+  // now (lib/roles.ts), so "Developer" and "GitHub" selected the same rows —
+  // two rows of chips, one of them a copy of the other, and a `?role=dev&on=x`
+  // that could return nothing at all. `?role=` is still read so that links
+  // already shared keep working; it resolves to its platform.
+  const legacy = isRoleKey(rawRole) ? kindForRole(rawRole) : null;
+  const kind: IdentityKind | null =
+    (rawOn ? (PLATFORM[rawOn] ?? null) : null) ?? legacy;
+  const on = kind === null ? null : kind === KIND.XUser ? "x" : "gh";
 
   // Both at once: the counts draw the filters the list sits under, so waiting
   // for one and then the other would show chips with no numbers first.
   const [cards, counts] = await Promise.all([
-    listCards({ role, kind }),
+    listCards({ kind }),
     countCards(),
   ]);
 
-  // Keeps the other filter when one changes, so picking "X" does not silently
-  // drop the role you were looking at.
-  const href = (next: { role?: RoleKey | null; on?: string | null }) => {
-    const q = new URLSearchParams();
-    const r = next.role === undefined ? role : next.role;
-    const o = next.on === undefined ? on : next.on;
-    if (r) q.set("role", r);
-    if (o) q.set("on", o);
-    const s = q.toString();
-    return s ? `/app?${s}` : "/app";
-  };
+  const href = (next: string | null) => (next ? `/app?on=${next}` : "/app");
 
   return (
     <div className="space-y-6">
@@ -68,50 +65,27 @@ export default async function Dashboard({
 
       <h1 className="text-2xl font-bold tracking-tight">People to pay</h1>
 
-      {/* Two filters, one line. Links rather than buttons: a filtered list is
-          worth sharing, and the back button should undo a filter. */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <nav className="flex flex-wrap items-center gap-2" aria-label="Platform">
-          <Chip href={href({ on: null })} active={on === null} label="All" n={counts.total} />
-          <Chip
-            href={href({ on: "gh" })}
-            active={on === "gh"}
-            label="GitHub"
-            n={counts.kind.github}
-            icon={<GithubMark size={13} />}
-          />
-          <Chip
-            href={href({ on: "x" })}
-            active={on === "x"}
-            label="X"
-            n={counts.kind.x}
-            icon={<XMark size={12} />}
-            iconIsName
-          />
-        </nav>
-
-        <nav
-          className="flex flex-wrap items-center gap-2 sm:ml-auto"
-          aria-label="Role"
-        >
-          <Chip
-            href={href({ role: null })}
-            active={role === null}
-            label="Everyone"
-            quiet
-          />
-          {ROLE_LIST.map((r) => (
-            <Chip
-              key={r.key}
-              href={href({ role: r.key })}
-              active={role === r.key}
-              label={r.label}
-              n={counts.role[r.key]}
-              quiet
-            />
-          ))}
-        </nav>
-      </div>
+      {/* One filter. Links rather than buttons: a filtered list is worth
+          sharing, and the back button should undo a filter. The chips carry the
+          role word with the platform's mark beside it, because those are now the
+          same distinction said two ways. */}
+      <nav className="flex flex-wrap items-center gap-2" aria-label="Who">
+        <Chip href={href(null)} active={on === null} label="Everyone" n={counts.total} />
+        <Chip
+          href={href("gh")}
+          active={on === "gh"}
+          label={ROLES[roleForKind(KIND.GithubUser)].label}
+          n={counts.kind.github}
+          icon={<GithubMark size={13} />}
+        />
+        <Chip
+          href={href("x")}
+          active={on === "x"}
+          label={ROLES[roleForKind(KIND.XUser)].label}
+          n={counts.kind.x}
+          icon={<XMark size={12} />}
+        />
+      </nav>
 
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <li>
@@ -168,36 +142,25 @@ function Chip({
   label,
   n,
   icon,
-  iconIsName = false,
-  quiet = false,
 }: {
   href: string;
   active: boolean;
   label: string;
   n?: number;
   icon?: React.ReactNode;
-  /**
-   * The icon already *is* the name — X's mark is the letter X. Printing both
-   * gives you "𝕏 X 1". The label stays for screen readers.
-   */
-  iconIsName?: boolean;
-  /** The role row is secondary to the platform row, and reads that way. */
-  quiet?: boolean;
 }) {
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-semibold transition-colors ${
-        quiet ? "text-xs" : "text-sm"
-      } ${
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
         active
           ? "border-accent bg-accent text-accent-fg"
           : "border-line text-mute hover:border-line-strong hover:text-text"
       }`}
     >
       {icon}
-      <span className={iconIsName ? "sr-only" : undefined}>{label}</span>
+      <span>{label}</span>
       {n !== undefined && (
         <span className={`num ${active ? "opacity-70" : "text-mute"}`}>{n}</span>
       )}

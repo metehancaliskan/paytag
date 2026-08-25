@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import { ROLE_LIST } from "@/lib/roles";
+import { slugOf } from "@/lib/identity";
 
 /**
  * The landing page. One job: explain the thing in ten seconds and put "Open
@@ -115,9 +116,13 @@ export default function Landing() {
                   <p className="mt-1.5 text-sm leading-relaxed text-mute">
                     {r.blurb} Fill one short form and people can pay you for it.
                   </p>
+                  {/* Straight to the right platform. The role IS the platform
+                      (lib/roles.ts), so "I build" can only mean the GitHub
+                      card — landing on the form with the other one selected
+                      would be the page contradicting itself. */}
                   <Link
                     className="link mt-4 inline-block text-sm"
-                    href="/app/submit"
+                    href={`/app/submit?for=${slugOf(r.kind)}`}
                   >
                     Submit yourself →
                   </Link>
