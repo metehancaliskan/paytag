@@ -70,6 +70,7 @@ db/
   schema_test.sql Behavioral test for the schema — nine negative cases, one retention case
   migration-001-roles.sql    Adds cards.role (shiller | dev) and the directory view
   migration-002-account.sql  Adds payout_prefs; keeps nonce records past account deletion
+  catch-up.sql    Both migrations in one paste, for a project created before them
 docs/
   PLAN.md         Phase-by-phase build plan, test criteria at every step
   SPEC.md         Technical spec + data model (Phase 1)
