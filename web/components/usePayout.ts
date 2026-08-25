@@ -40,11 +40,21 @@ export function usePayout() {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!supabase || signature === "") return;
+    if (!supabase) return;
     let alive = true;
 
     void (async () => {
       try {
+        // No identity, nothing to look up — and `rows` must become an empty
+        // list rather than staying null. A caller that renders a skeleton while
+        // this is null would otherwise show it forever to a signed-out reader,
+        // which is exactly how a settings page ends up looking broken.
+        if (identity.status === "loading") return;
+        if (identity.status !== "verified") {
+          if (alive) setRows([]);
+          return;
+        }
+
         const { data: auth } = await supabase.auth.getUser();
         if (!auth.user) throw new Error("no session");
 
@@ -96,7 +106,7 @@ export function usePayout() {
     return () => {
       alive = false;
     };
-  }, [supabase, signature]);
+  }, [supabase, signature, identity.status]);
 
   /** Reflect a write locally, so a save does not need a round trip to show. */
   const setSaved = useCallback((identityId: string, saved: string | null) => {

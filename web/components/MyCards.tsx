@@ -25,7 +25,7 @@ type Mine = { card: PersonCard; published: boolean };
  * handle, listed or draft, and the way in to edit it. The preview belongs where
  * the card is actually seen — the dashboard and /p/<kind>/<handle>.
  */
-export default function MyCards() {
+export default function MyCards({ empty }: { empty: string }) {
   const supabase = useMemo(() => browserSupabase(), []);
   const { identity } = useIdentity();
   const mine = identityList(identity);
@@ -108,7 +108,9 @@ export default function MyCards() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, key]);
 
-  if (identity.status !== "verified") return null;
+  if (identity.status !== "verified") {
+    return <p className="text-sm text-mute">{empty}</p>;
+  }
 
   return (
     <div className="space-y-3">

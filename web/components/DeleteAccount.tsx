@@ -25,7 +25,7 @@ import { useIdentity, identityList } from "./useIdentity";
  * screen is holding data for an account that no longer exists, and a reload is
  * the only way to be sure none of it is still believed.
  */
-export default function DeleteAccount() {
+export default function DeleteAccount({ empty }: { empty: string }) {
   const { identity } = useIdentity();
   const mine = identityList(identity);
 
@@ -36,7 +36,10 @@ export default function DeleteAccount() {
 
   // Nothing to delete until something is verified: an anonymous visitor has no
   // account, and a signed-in one with no identity has nothing this could take.
-  if (identity.status !== "verified" || mine.length === 0) return null;
+  // Said in a line rather than rendered as a gap.
+  if (identity.status !== "verified" || mine.length === 0) {
+    return <p className="text-sm text-mute">{empty}</p>;
+  }
 
   const target = mine[0].handle;
   const ready = typed.trim().replace(/^@/, "").toLowerCase() === target;

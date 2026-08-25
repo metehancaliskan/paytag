@@ -56,7 +56,7 @@ export default function ConnectPanel({ authError }: { authError?: string }) {
               ) : verified ? (
                 <>
                   <Link
-                    className="min-w-0 font-semibold hover:underline"
+                    className="mono min-w-0 font-semibold hover:underline"
                     href={`/p/${slugOf(verified.kind)}/${verified.handle}`}
                   >
                     {kindUrlPrefix(verified.kind)}
@@ -69,7 +69,9 @@ export default function ConnectPanel({ authError }: { authError?: string }) {
                 </>
               ) : (
                 <>
-                  <span className="text-mute">{p.label}</span>
+                  {/* The domain, not the brand name: the row then reads the
+                      same shape before and after — `x.com` → `x.com/you`. */}
+                  <span className="mono text-mute">{p.domain}</span>
                   <button
                     className="btn btn-ghost btn-sm ml-auto"
                     onClick={() => void signIn(p.key, "/profile")}

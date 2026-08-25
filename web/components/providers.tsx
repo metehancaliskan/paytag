@@ -17,6 +17,12 @@ import type { IdentityKind } from "@/lib/identity";
 export type ProviderRow = {
   key: ProviderKey;
   label: string;
+  /**
+   * The provider named the way a handle is written, so a row reads the same
+   * before and after verification: `x.com` becomes `x.com/you`. It also avoids
+   * the stutter of "𝕏 X" — the mark already *is* the letter.
+   */
+  domain: string;
   kind: IdentityKind;
   icon: React.ReactNode;
 };
@@ -25,12 +31,14 @@ export const PROVIDERS: ProviderRow[] = [
   {
     key: "github",
     label: "GitHub",
+    domain: "github.com",
     kind: PROVIDER_KIND.github,
     icon: <GithubMark size={16} className="shrink-0 text-dim" />,
   },
   {
     key: "x",
     label: "X",
+    domain: "x.com",
     kind: PROVIDER_KIND.x,
     icon: <XMark size={14} className="shrink-0 text-dim" />,
   },

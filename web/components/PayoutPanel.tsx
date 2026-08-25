@@ -29,7 +29,7 @@ import { NETWORK } from "@/lib/config";
  * theirs alone under row level security, and the weaker credential is the
  * correct one wherever it is sufficient.
  */
-export default function PayoutPanel() {
+export default function PayoutPanel({ empty }: { empty: string }) {
   const supabase = useMemo(() => browserSupabase(), []);
   const { address: connected } = useWallet();
   const { rows, failed, setSaved } = usePayout();
@@ -43,7 +43,12 @@ export default function PayoutPanel() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  if (rows !== null && rows.length === 0) return null;
+  // Never a blank column. With no verified handle there is nothing to set, and
+  // the section says so in one line — an empty cell beside a label reads as a
+  // page that failed to load.
+  if (rows !== null && rows.length === 0) {
+    return <p className="text-sm text-mute">{empty}</p>;
+  }
 
   /**
    * Switching identity abandons a half-typed address rather than carrying it

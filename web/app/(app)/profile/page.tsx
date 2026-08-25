@@ -52,21 +52,21 @@ export default async function SettingsPage({
           title="Payout wallet"
           hint="Where a claim pays. Empty means whichever wallet you connect."
         >
-          <PayoutPanel />
+          <PayoutPanel empty="Set one once a handle is connected." />
         </Section>
 
         <Section
           title="Your cards"
           hint="What the directory shows. Your handle is payable without one."
         >
-          <MyCards />
+          <MyCards empty="One card per handle, written after you connect." />
         </Section>
 
         <Section
           title="Leave"
           hint="Deleting frees your handle. Escrow belongs to the handle, so it stays."
         >
-          <DeleteAccount />
+          <DeleteAccount empty="Nothing to delete yet." />
         </Section>
       </div>
     </div>
