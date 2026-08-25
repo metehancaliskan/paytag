@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PersonCardView from "@/components/PersonCard";
-import HandleSearch from "@/components/HandleSearch";
-import YouStrip from "@/components/YouStrip";
 import { GithubMark, XMark } from "@/components/icons";
 import { listCards, countCards } from "@/lib/cards.server";
 import { ROLE_LIST, isRoleKey, type RoleKey } from "@/lib/roles";
@@ -60,17 +58,15 @@ export default async function Dashboard({
         </p>
       )}
 
-      {/* The only row about the reader. Everything below is about everyone
-          else, which is the right proportion for a directory. */}
-      <YouStrip />
+      {/* Nothing about the reader on this page.
+          It carried two things that have both stopped paying for themselves.
+          A "listed as @you" row, when an account can hold at most two cards and
+          Settings already lists them; and a handle field, when the directory
+          shows everyone and the field still lives where it is actually needed —
+          on a person's page ("pay someone else") and on a 404. The dashboard is
+          about everyone else, so it is only about everyone else. */}
 
-      {/* Paying a handle that is not listed is the original promise and must
-          stay one field away, not behind a menu. */}
-      <div className="card p-4">
-        <HandleSearch />
-      </div>
-
-      <h1 className="pt-2 text-2xl font-bold tracking-tight">People to pay</h1>
+      <h1 className="text-2xl font-bold tracking-tight">People to pay</h1>
 
       {/* Two filters, one line. Links rather than buttons: a filtered list is
           worth sharing, and the back button should undo a filter. */}

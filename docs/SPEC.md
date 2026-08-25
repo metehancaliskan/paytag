@@ -752,10 +752,18 @@ page carries neither. Everything behind "App →" gets the product chrome from
 directory and the form; both are permanent redirects in `next.config.ts`, since
 they were shared while they existed.
 
-The dashboard at `/app` opens with one row about the reader (`YouStrip`) in one
-of three states — not connected, verified but unlisted, listed — each with a
-single action, then the handle search, then the list. The proportion is
-deliberate: one row about you, the rest of the page about everyone else.
+The dashboard at `/app` is about everyone except the reader. It carried two
+rows about them and both were removed once the rest of the product caught up: a
+"listed as @you" strip, made redundant by Settings — an account holds at most
+two cards, and that page lists them — and the handle field, made redundant by a
+directory that shows everyone.
+
+Paying a handle that is *not* listed is still the original promise, and the
+field that does it still exists: on a person's page (`/p/<kind>/<handle>`, where
+"pay someone else" is the natural next thought) and on the 404, where someone
+who mistyped a handle is exactly the person who needs it. `/p/<kind>/<handle>`
+also resolves for any handle at all, listed or not — the URL is the API. What
+was dropped is one field on one page, not a capability.
 
 ---
 
