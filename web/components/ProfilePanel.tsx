@@ -12,7 +12,7 @@ import {
   type Payment,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import { KIND, kindByteHex, type IdentityKind } from "@/lib/identity";
+import { KIND, kindByteHex, slugOf, type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits } from "@/lib/format";
 import { DEFAULT_TOKEN, tokenByContractId } from "@/lib/config";
 
@@ -145,7 +145,13 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
               {displayUnits(claimableTotal)} {headlineAsset.symbol}
             </span>{" "}
             claimable ·{" "}
-            <Link className="link" href={`/claim?handle=${handle}`}>
+            {/* The kind travels with the handle. The same name can be a
+                GitHub account and somebody else's X account, so a claim link
+                that carries only the name points at an ambiguous thing. */}
+            <Link
+              className="link"
+              href={`/claim?on=${slugOf(kind)}&handle=${handle}`}
+            >
               Is this you?
             </Link>
           </p>

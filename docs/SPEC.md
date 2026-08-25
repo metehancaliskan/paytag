@@ -749,6 +749,38 @@ X is carried everywhere in this section — the role, the card, the directory ro
 the linked-identity line — and only the sign-in button is inert, for the reason
 in §7.4. When X verification lands, nothing in §8 changes.
 
+### 8.4b The same name on two platforms
+
+`torvalds` on GitHub and `torvalds` on X are two different tags, and they may
+belong to two different people. Nothing in the product has to *resolve* that
+ambiguity, because the ambiguity never exists: the kind byte is inside the hash.
+
+```
+identity_key = sha256(0x00 ‖ "torvalds")  = 9d8638cd…   the GitHub account
+identity_key = sha256(0x02 ‖ "torvalds")  = cb254de1…   the X account
+```
+
+Two unrelated 32-byte keys, so two escrow pools that cannot see each other. From
+there it holds all the way up:
+
+| Layer | What keeps them apart |
+|---|---|
+| Contract | The key is the map key. A claim signature names one key and `claim` refuses a payment whose `identity` differs (`Error::IdentityMismatch`). |
+| Database | `unique (kind, handle)` — the same handle may exist once per kind, under **different** profiles. `unique (profile_id, kind)` — one account holds at most one of each. |
+| Verifier | `POST /api/verify/claim-auth` takes `kind` and `handle`, looks up the identity row for *that* kind on the caller's profile, and recomputes the key from both. A GitHub session cannot obtain a signature for an X tag. |
+| URLs | `/p/gh/torvalds` and `/p/x/torvalds` are separate pages. |
+| Interface | Every row, card, chip and claim carries the platform icon and the `github.com/` or `x.com/` prefix. Nothing anywhere shows a bare handle as if it were unique. |
+
+The last row is where the real risk lives, and it is a UI risk rather than a
+protocol one. It bit once already: the "Is this you?" link on a person's page
+passed only `?handle=`, so a claim reached from an X page announced the money as
+waiting for `github.com/<name>`. The link now carries `?on=gh|x` and the claim
+page reads it — both for the sentence it prints and for which row it opens on. A
+handle without its kind is not an identity, and no link inside the product is
+allowed to pass one.
+
+---
+
 ### 8.5 Two front doors
 
 The site splits at the root, and the split is in the file tree rather than in a
@@ -766,6 +798,13 @@ page carries neither. Everything behind "App →" gets the product chrome from
 `app/(app)/layout.tsx`. `/people` and `/card` were the earlier addresses of the
 directory and the form; both are permanent redirects in `next.config.ts`, since
 they were shared while they existed.
+
+`/claim` is a list, not a wizard: one row per identity, both totals visible at
+once, a Claim button on whichever row has something, and a row with a Verify
+button for the provider not yet connected. It was three numbered steps with a
+segmented control inside the first, which let a person with two handles see one
+escrow at a time — on a page whose only real question is "how much is on each of
+mine".
 
 The dashboard at `/app` is about everyone except the reader. It carried two
 rows about them and both were removed once the rest of the product caught up: a
