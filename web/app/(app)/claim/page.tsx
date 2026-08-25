@@ -20,12 +20,14 @@ export default async function ClaimPage({
   const hintKind = on !== undefined && isKindSlug(on) ? KIND_SLUG[on] : null;
 
   return (
-    <div className="space-y-6">
-      <header className="max-w-xl">
+    // A narrow column, like Settings. Two rows stretched across a 1900px
+    // display put the handle at one edge and its amount at the other, with a
+    // hand's width of nothing between them — the page read as a bar, not a
+    // list. Nothing here needs more than a reading measure.
+    <div className="mx-auto max-w-2xl space-y-5">
+      <header>
         <h1 className="text-3xl font-bold tracking-tight">Claim your escrow</h1>
-        <p className="mt-2 text-dim">
-          Each handle holds its own escrow.
-        </p>
+        <p className="mt-1.5 text-dim">Each handle holds its own escrow.</p>
       </header>
 
       <ClaimPanel

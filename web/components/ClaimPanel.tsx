@@ -239,7 +239,7 @@ export default function ClaimPanel({
   }
 
   if (identity.status === "loading") {
-    return <div className="skeleton h-40 w-full" />;
+    return <div className="skeleton h-32 w-full" />;
   }
 
   if (mine.length === 0) {
@@ -306,30 +306,52 @@ export default function ClaimPanel({
           );
 
           return (
+            // Two columns, not a wrapping flex row: the handle and its meta
+            // form one block on the left, the amount and its button one cluster
+            // on the right, and the row keeps the same shape whether or not
+            // there is money on it.
             <li
               key={v.identityHex}
-              className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4"
+              className="flex items-center justify-between gap-4 p-4"
             >
-              <span className="flex min-w-0 items-center gap-2">
-                {PROVIDERS.find((p) => p.kind === v.kind)?.icon}
-                <span className="mono truncate text-sm">
-                  {kindUrlPrefix(v.kind)}
-                  {v.handle}
+              <span className="min-w-0">
+                <span className="flex items-center gap-2">
+                  {PROVIDERS.find((p) => p.kind === v.kind)?.icon}
+                  <span className="mono truncate text-sm">
+                    {kindUrlPrefix(v.kind)}
+                    {v.handle}
+                  </span>
                 </span>
+
+                {/* Only what the row does not already say. A locked payout is
+                    worth a line; the connected wallet is said once, below. */}
+                {escrow && escrow.total > 0n && (
+                  <span className="mt-0.5 block pl-6 text-xs text-mute">
+                    {soonest !== null && soonest !== undefined && ledger !== null && (
+                      <>{ledgersToHuman(soonest - ledger)} left</>
+                    )}
+                    {locked && (
+                      <>
+                        {" · pays "}
+                        <span className="mono">{shortAddr(locked)}</span>
+                      </>
+                    )}
+                  </span>
+                )}
               </span>
 
-              <span className="ml-auto flex items-center gap-4">
+              <span className="flex shrink-0 items-center gap-3">
                 {escrows === null ? (
                   <span className="skeleton h-6 w-20" />
                 ) : (
                   <span
-                    className={`num text-xl font-bold ${
+                    className={`num text-lg font-bold ${
                       (escrow?.total ?? 0n) > 0n ? "text-accent-text" : "text-mute"
                     }`}
                     title={`${fromUnits(escrow?.total ?? 0n)} ${DEFAULT_TOKEN.symbol}`}
                   >
                     {displayUnits(escrow?.total ?? 0n)}{" "}
-                    <span className="text-sm font-semibold text-dim">
+                    <span className="text-xs font-semibold text-dim">
                       {DEFAULT_TOKEN.symbol}
                     </span>
                   </span>
@@ -346,22 +368,6 @@ export default function ClaimPanel({
                   </button>
                 )}
               </span>
-
-              {/* Only what this row does not already say. A locked payout is
-                  worth a line; the connected wallet is said once, below. */}
-              {escrow && escrow.total > 0n && (
-                <span className="w-full text-xs text-mute">
-                  {soonest !== null && soonest !== undefined && ledger !== null && (
-                    <>{ledgersToHuman(soonest - ledger)} left</>
-                  )}
-                  {locked && (
-                    <>
-                      {" · pays "}
-                      <span className="mono">{shortAddr(locked)}</span>
-                    </>
-                  )}
-                </span>
-              )}
             </li>
           );
         })}
@@ -371,12 +377,14 @@ export default function ClaimPanel({
         {PROVIDERS.filter((p) => !mine.some((v) => v.kind === p.kind)).map((p) => (
           <li
             key={p.key}
-            className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4"
+            className="flex items-center justify-between gap-4 p-4"
           >
-            {p.icon}
-            <span className="mono text-mute">{p.domain}</span>
+            <span className="flex items-center gap-2">
+              {p.icon}
+              <span className="mono text-sm text-mute">{p.domain}</span>
+            </span>
             <button
-              className="btn btn-ghost btn-sm ml-auto"
+              className="btn btn-ghost btn-sm shrink-0"
               onClick={() => void signIn(p.key, "/claim")}
               disabled={p.key === "x" && !X_ENABLED}
               title={
@@ -392,7 +400,7 @@ export default function ClaimPanel({
       </ul>
 
       {/* One line about the wallet, for every row that has no locked address. */}
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-mute">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 text-xs text-mute">
         {installed === false ? (
           <a
             className="link"
@@ -422,10 +430,13 @@ export default function ClaimPanel({
           </>
         )}
 
-        <button className="btn btn-quiet btn-sm ml-auto" onClick={() => void signOut()}>
+        <button
+          className="btn btn-quiet btn-sm ml-auto"
+          onClick={() => void signOut()}
+        >
           Sign out
         </button>
-      </p>
+      </div>
 
       {escrows !== null && !anything && !error && (
         <p className="text-sm text-mute">Nothing waiting right now.</p>
