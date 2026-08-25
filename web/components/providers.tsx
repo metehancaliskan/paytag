@@ -24,7 +24,14 @@ export type ProviderRow = {
    */
   domain: string;
   kind: IdentityKind;
+  /** The mark in list colour — beside a handle, in a menu, on a tile. */
   icon: React.ReactNode;
+  /**
+   * The same mark taking the colour of whatever it sits in. `icon` is dimmed on
+   * purpose, which on a filled green button turns into a grey smudge — so a
+   * button gets this one instead.
+   */
+  mark: React.ReactNode;
 };
 
 export const PROVIDERS: ProviderRow[] = [
@@ -34,6 +41,7 @@ export const PROVIDERS: ProviderRow[] = [
     domain: "github.com",
     kind: PROVIDER_KIND.github,
     icon: <GithubMark size={16} className="shrink-0 text-dim" />,
+    mark: <GithubMark size={16} className="shrink-0" />,
   },
   {
     key: "x",
@@ -41,5 +49,6 @@ export const PROVIDERS: ProviderRow[] = [
     domain: "x.com",
     kind: PROVIDER_KIND.x,
     icon: <XMark size={14} className="shrink-0 text-dim" />,
+    mark: <XMark size={14} className="shrink-0" />,
   },
 ];

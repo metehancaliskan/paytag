@@ -167,6 +167,7 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
       {/* ---------------------------------------------------------- send */}
       <SendForm
         handle={handle}
+        kind={kind}
         identityHex={identityHex}
         ledger={ledger}
         onSent={refresh}

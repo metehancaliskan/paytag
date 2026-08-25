@@ -13,7 +13,7 @@ import {
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { sign, networkMismatch } from "@/lib/freighter";
-import { fromHex } from "@/lib/identity";
+import { fromHex, kindUrlPrefix, type IdentityKind } from "@/lib/identity";
 import {
   formatDate,
   displayUnits,
@@ -44,11 +44,14 @@ import {
  */
 export default function SendForm({
   handle,
+  kind,
   identityHex,
   ledger,
   onSent,
 }: {
   handle: string;
+  /** Which platform the handle is on. Two people can hold the same name. */
+  kind: IdentityKind;
   identityHex: string;
   /** Current ledger, for the "refundable after" preview. */
   ledger: number | null;
@@ -229,7 +232,11 @@ export default function SendForm({
               >
                 {displayUnits(sent.units, sent.decimals)}
               </span>{" "}
-              {sent.symbol} is in escrow for @{handle}
+              {sent.symbol} is in escrow for{" "}
+              <span className="mono">
+                {kindUrlPrefix(kind)}
+                {handle}
+              </span>
             </h2>
             <p className="mt-1 text-sm text-dim">
               Only the verified owner can move it

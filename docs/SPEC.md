@@ -735,6 +735,37 @@ the whole enforcement: `cards_insert_own` and `cards_update_own` require
 somebody else. The service role is not involved, because it does not need to
 be — the weakest credential that can do the job is the one that should.
 
+**Per platform, and at the moment of writing.** Being verified is not one state
+but two: a card for `x.com/you` requires the X account signed in, a card for
+`github.com/you` requires GitHub, and neither substitutes for the other. This
+is not a new rule — `cards.identity_id` could never have pointed anywhere else —
+but until the interface asked the question it was invisible: `/app/submit`
+silently led with whichever identity happened to be first, so a person with only
+GitHub verified was writing a GitHub card without ever being told which handle
+they were describing.
+
+So the platform is question **one** on the form, both providers are listed
+whether verified or not, and choosing the unverified one replaces the rest of
+the form with a single Connect row:
+
+```
+/app/submit?for=x
+   ├── X verified      → the form, loading the X card
+   └── X not verified  → "Sign in with X to write this card."
+                          → OAuth, next=/app/submit?for=x → back here, answered
+```
+
+The return path carries the choice, so the round trip comes back to the question
+it left on. Two details that are honesty rather than mechanism: the gate says
+the sign-in *adds* a platform and leaves the other handle alone (people
+reasonably fear that connecting a second account replaces the first), and it
+names both handles rather than "your account", because the two are separate
+tags with separate escrows.
+
+Signing in is no longer reachable from `/app/submit` as a detour to Settings.
+Sending someone away from a form to authorize a thing the form needs, and hoping
+they come back to it, is how a two-minute task becomes an abandoned one.
+
 ### 8.3 What a card cannot do
 
 A card is a shop window. It carries no money, no address and no authority:

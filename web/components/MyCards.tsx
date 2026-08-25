@@ -7,7 +7,7 @@ import { useIdentity, identityList } from "./useIdentity";
 import { GithubMark, XMark } from "./icons";
 import { parseLink, type PersonCard } from "@/lib/cards";
 import { isRoleKey } from "@/lib/roles";
-import { KIND, slugOf } from "@/lib/identity";
+import { KIND, kindUrlPrefix, slugOf } from "@/lib/identity";
 
 type Mine = { card: PersonCard; published: boolean };
 
@@ -112,6 +112,15 @@ export default function MyCards({ empty }: { empty: string }) {
     return <p className="text-sm text-mute">{empty}</p>;
   }
 
+  // The verified handle with no card yet, so "write the other one" opens that
+  // one rather than whichever the editor would have led with.
+  const missing =
+    rows === null
+      ? null
+      : (mine.find(
+          (v) => !rows.some((r) => r.card.kind === v.kind),
+        ) ?? null);
+
   return (
     <div className="space-y-3">
       {rows === null ? (
@@ -133,7 +142,13 @@ export default function MyCards({ empty }: { empty: string }) {
               ) : (
                 <GithubMark size={16} className="shrink-0 text-dim" />
               )}
-              <span className="font-semibold">@{card.handle}</span>
+              {/* The platform, not just the name: someone else's X handle can
+                  be spelled exactly like your GitHub one, and this list is
+                  where you decide which card to edit. */}
+              <span className="mono font-semibold">
+                {kindUrlPrefix(card.kind)}
+                {card.handle}
+              </span>
               <span
                 className={`badge ${published ? "badge-claimed" : "badge-pending"}`}
               >
@@ -145,7 +160,13 @@ export default function MyCards({ empty }: { empty: string }) {
               >
                 View
               </Link>
-              <Link className="btn btn-ghost btn-sm" href="/app/submit">
+              {/* The platform travels with the link. Without it, "Edit" beside
+                  the X card opened the GitHub one — the editor leads with
+                  whichever identity is first. */}
+              <Link
+                className="btn btn-ghost btn-sm"
+                href={`/app/submit?for=${slugOf(card.kind)}`}
+              >
                 Edit
               </Link>
               <p className="w-full truncate text-sm text-mute">
@@ -157,7 +178,10 @@ export default function MyCards({ empty }: { empty: string }) {
       )}
 
       {rows !== null && rows.length < mine.length && (
-        <Link className="btn btn-ghost btn-sm" href="/app/submit">
+        <Link
+          className="btn btn-ghost btn-sm"
+          href={`/app/submit${missing ? `?for=${slugOf(missing.kind)}` : ""}`}
+        >
           {rows.length === 0 ? "Write one" : "Write the other one"}
         </Link>
       )}

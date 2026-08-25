@@ -4,12 +4,20 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
 import { useIdentity, identityList } from "./useIdentity";
+import { PROVIDERS } from "./providers";
 import PersonCardView from "./PersonCard";
 import CopyButton from "./CopyButton";
-import { GithubMark, XMark } from "./icons";
-import { KIND, kindUrlPrefix, slugOf } from "@/lib/identity";
+import {
+  KIND,
+  kindLabel,
+  kindUrlPrefix,
+  slugOf,
+  type IdentityKind,
+} from "@/lib/identity";
 import { parseLink, type PersonCard } from "@/lib/cards";
 import { describeWriteError } from "@/lib/db-errors";
+import { describeAuthError } from "@/lib/auth-errors";
+import { X_ENABLED } from "@/lib/config";
 import {
   ECOSYSTEMS,
   MAX_LINKS,
@@ -46,12 +54,28 @@ type Loaded = {
  * session and not the service role — row level security is enough here, and
  * the weaker credential is the correct one.
  *
- * Verification comes first (SPEC §2): the card hangs off a verified identity
- * row, which is what stops anyone from writing a page in someone else's name.
+ * Verification comes first (SPEC §2), and it is enforced PER PLATFORM, here, as
+ * question one. A card for x.com/you needs the X account signed in; a card for
+ * github.com/you needs GitHub. Neither stands in for the other, because the two
+ * are separate identities holding separate escrows — and the same name on the
+ * two platforms may well be two different people (SPEC §8.4b).
+ *
+ * So both providers are always on screen, verified or not, and choosing the one
+ * you have not proven yet replaces the form with a single Connect row instead of
+ * sending you to Settings and hoping you find your way back. The return path
+ * carries the choice (`?for=gh|x`), so OAuth lands on this page with question
+ * one already answered.
  */
-export default function CardEditor() {
+export default function CardEditor({
+  hintKind,
+  authError,
+}: {
+  /** Which platform to open on, from `?for=gh|x`. */
+  hintKind?: IdentityKind | null;
+  authError?: string;
+}) {
   const supabase = useMemo(() => browserSupabase(), []);
-  const { identity } = useIdentity();
+  const { identity, error: authProblem, signIn } = useIdentity();
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -70,17 +94,24 @@ export default function CardEditor() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
+  // A flag, not a timestamp: nothing reads *when* it was saved, and
+  // `Date.now()` in a component is an impure call the linter is right about.
+  const [saved, setSaved] = useState(false);
 
   // A card hangs off ONE identity (db/schema.sql: cards.identity_id), so a
   // person with both a GitHub and an X handle writes two cards — separate
-  // texts, separate escrows. Which one is being edited is therefore a choice
+  // texts, separate escrows. Which one is being written is therefore a choice
   // the writer makes, not something inferred from an ordering.
+  //
+  // Held as "the platform", not "the verified identity at index n": the choice
+  // has to be expressible before the identity exists, since making it is what
+  // triggers the sign-in.
   const mine = identityList(identity);
-  const [pick, setPick] = useState(0);
-  const chosen = mine[Math.min(pick, Math.max(mine.length - 1, 0))] ?? null;
+  const [picked, setPicked] = useState<IdentityKind | null>(null);
+  const kind: IdentityKind =
+    picked ?? hintKind ?? mine[0]?.kind ?? KIND.GithubUser;
+  const chosen = mine.find((v) => v.kind === kind) ?? null;
   const handle = chosen?.handle ?? null;
-  const kind = chosen?.kind ?? KIND.GithubUser;
 
   // Load the identity row and any card already on it. Both reads are ordinary
   // authenticated reads: `identities` is world readable, and RLS on `cards`
@@ -144,7 +175,7 @@ export default function CardEditor() {
           Array.from({ length: MAX_LINKS }, (_, i) => existing?.links[i] ?? ""),
         );
         setPublished(existing?.published ?? true);
-        setSavedAt(null);
+        setSaved(false);
       } catch {
         if (alive) setLoadFailed(true);
       }
@@ -202,7 +233,10 @@ export default function CardEditor() {
     : null;
 
   async function save() {
-    if (!supabase || !loaded || problem) return;
+    // `chosen` in the guard as well as `loaded`: the form only renders for a
+    // verified platform, and the write must be impossible without one even if
+    // some future render forgets that.
+    if (!supabase || !loaded || !chosen || problem) return;
     setError(null);
     setBusy(true);
     try {
@@ -220,7 +254,7 @@ export default function CardEditor() {
         { onConflict: "identity_id" },
       );
       if (e) throw new Error(e.message);
-      setSavedAt(Date.now());
+      setSaved(true);
     } catch (e) {
       setError(describeWriteError(e));
     } finally {
@@ -243,21 +277,10 @@ export default function CardEditor() {
     return <div className="skeleton h-48 w-full" />;
   }
 
-  if (identity.status === "anon") {
-    return (
-      <div className="card p-6">
-        <h2 className="text-lg font-bold">Connect an account first</h2>
-        <p className="mt-1.5 text-sm text-mute">
-          A card hangs off a verified handle. That is what stops anyone from
-          writing a page in your name — and it is one click.
-        </p>
-        <Link className="btn btn-primary mt-4" href="/profile">
-          <GithubMark size={16} />
-          Connect GitHub or X
-        </Link>
-      </div>
-    );
-  }
+  // There is no separate "you are signed out" screen any more. Signed out is
+  // just the state where neither platform is verified yet, and the picker below
+  // already says so on both rows — one screen instead of two, and the reader
+  // chooses which handle they are here for before signing in rather than after.
 
   if (loadFailed) {
     return (
@@ -269,41 +292,120 @@ export default function CardEditor() {
 
   // -------------------------------------------------------------- the form
   //
-  // ONE card, and the whole of it fits on a phone screen: three numbered
-  // questions, an optional disclosure, and the button. It was five separate
-  // panels, which made a two-minute form look like a registration process —
-  // and buried the two fields that are actually required among three that are
-  // not.
+  // ONE card, and the whole of it fits on a phone screen: the handle, three
+  // numbered questions, an optional disclosure, and the button. It was five
+  // separate panels, which made a two-minute form look like a registration
+  // process — and buried the two fields that are actually required among three
+  // that are not.
+
+  const provider = PROVIDERS.find((p) => p.kind === kind) ?? PROVIDERS[0];
+  const usable = provider.key !== "x" || X_ENABLED;
+  const authMessage = authProblem ?? describeAuthError(authError);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,19rem)] lg:items-start">
       <div className="card divide-y divide-line">
-        {mine.length > 1 && (
-          <div className="flex flex-wrap items-center gap-3 p-5">
-            <span className="menu-label">Card for</span>
-            <div className="segmented">
-              {mine.map((v, i) => (
-                <button
-                  key={v.identityHex}
-                  aria-pressed={v.identityHex === chosen?.identityHex}
-                  onClick={() => setPick(i)}
-                >
-                  {v.kind === KIND.XUser ? (
-                    <XMark size={12} className="mr-1 inline align-[-1px]" />
-                  ) : (
-                    <GithubMark size={12} className="mr-1 inline align-[-1px]" />
-                  )}
-                  @{v.handle}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------ 1 role */}
+        {/* -------------------------------------------------- 1 the handle
+            First, because it decides everything under it: which escrow the
+            card advertises, which page it becomes, and — when the platform is
+            not verified yet — whether there is a form at all. */}
         <fieldset className="p-5">
           <legend className="label">
-            <Step n={1} /> What do you do?
+            <Step n={1} /> Which handle is this card for?
+          </legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {PROVIDERS.map((p) => {
+              const v = mine.find((m) => m.kind === p.kind) ?? null;
+              const on = p.kind === kind;
+              const allowed = p.key !== "x" || X_ENABLED;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={!allowed}
+                  title={allowed ? undefined : "Not enabled on this deployment yet"}
+                  onClick={() => setPicked(p.kind)}
+                  className={`rounded-xl border p-3 text-left transition-colors disabled:opacity-40 ${
+                    on
+                      ? "border-accent bg-raised"
+                      : "border-line hover:border-line-strong"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    {p.icon}
+                    {/* The domain, so the row reads the same shape before and
+                        after verification: `x.com` becomes `x.com/you`. */}
+                    <span className="mono truncate text-sm font-semibold">
+                      {p.domain}
+                      {v ? `/${v.handle}` : ""}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-xs text-mute">
+                    {!allowed
+                      ? "not enabled here"
+                      : v
+                        ? "verified"
+                        : "needs signing in"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {chosen === null ? (
+          /* ------------------------------------------------ the hard stop
+             The card describes a handle people send money to, so it cannot be
+             written by somebody who has not proven they hold it. This is that
+             rule, at the moment it applies, in one row. */
+          <div className="p-5">
+            <p className="font-semibold">
+              Sign in with {kindLabel(kind)} to write this card.
+            </p>
+            <p className="mt-1 text-sm text-mute">
+              {mine.length > 0 ? (
+                <>
+                  It adds {provider.domain} to this account —{" "}
+                  <span className="mono">
+                    {kindUrlPrefix(mine[0].kind)}
+                    {mine[0].handle}
+                  </span>{" "}
+                  stays exactly as it is. Each handle keeps its own card and its
+                  own escrow.
+                </>
+              ) : (
+                <>
+                  The card sits on a handle people pay, so the handle has to be
+                  proven yours. One click, and you come back here.
+                </>
+              )}
+            </p>
+
+            <button
+              className="btn btn-primary mt-4"
+              disabled={!usable}
+              title={usable ? undefined : "Not enabled on this deployment yet"}
+              onClick={() =>
+                void signIn(provider.key, `/app/submit?for=${slugOf(kind)}`)
+              }
+            >
+              {provider.mark}
+              Connect {provider.label}
+            </button>
+
+            {authMessage && (
+              <p role="alert" className="mt-3 text-sm text-danger">
+                {authMessage}
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+        {/* ------------------------------------------------------ 2 role */}
+        <fieldset className="p-5">
+          <legend className="label">
+            <Step n={2} /> What do you do?
           </legend>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {ROLE_LIST.map((r) => (
@@ -327,10 +429,10 @@ export default function CardEditor() {
           </div>
         </fieldset>
 
-        {/* -------------------------------------------------- 2 headline */}
+        {/* -------------------------------------------------- 3 headline */}
         <div className="p-5">
           <label className="label" htmlFor="headline">
-            <Step n={2} /> One line about your work
+            <Step n={3} /> One line about your work
           </label>
           <input
             id="headline"
@@ -344,10 +446,10 @@ export default function CardEditor() {
           <Counter value={headline} min={HEADLINE_MIN} max={HEADLINE_MAX} />
         </div>
 
-        {/* --------------------------------------------------- 3 summary */}
+        {/* --------------------------------------------------- 4 summary */}
         <div className="p-5">
           <label className="label" htmlFor="summary">
-            <Step n={3} /> What have you actually shipped?
+            <Step n={4} /> What have you actually shipped?
           </label>
           <textarea
             id="summary"
@@ -479,7 +581,7 @@ export default function CardEditor() {
             )}
           </div>
 
-          {savedAt !== null && (
+          {saved && (
             <div
               aria-live="polite"
               className="mt-4 border-t border-line pt-4 text-sm"
@@ -518,22 +620,28 @@ export default function CardEditor() {
             </p>
           )}
         </div>
+          </>
+        )}
       </div>
 
-      {/* ----------------------------------------------------- preview */}
-      <aside className="space-y-2 lg:sticky lg:top-6">
-        <p className="menu-label">How people will see you</p>
-        {preview && <PersonCardView card={preview} preview />}
-        <p className="text-xs leading-relaxed text-mute">
-          {kindUrlPrefix(kind)}
-          {handle} is the tag money is bound to. The card only describes it.
-        </p>
-      </aside>
+      {/* ----------------------------------------------------- preview
+          Only once the handle is real. A preview card with a blank name is a
+          promise about a page that does not exist yet. */}
+      {preview && (
+        <aside className="space-y-2 lg:sticky lg:top-6">
+          <p className="menu-label">How people will see you</p>
+          <PersonCardView card={preview} preview />
+          <p className="text-xs leading-relaxed text-mute">
+            {kindUrlPrefix(kind)}
+            {handle} is the tag money is bound to. The card only describes it.
+          </p>
+        </aside>
+      )}
     </div>
   );
 }
 
-/** The step number, so three questions read as three and not as a form. */
+/** The step number, so four questions read as four and not as a form. */
 function Step({ n }: { n: number }) {
   return (
     <span

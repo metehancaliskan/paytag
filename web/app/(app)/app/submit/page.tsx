@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import CardEditor from "@/components/CardEditor";
+import { KIND_SLUG, isKindSlug } from "@/lib/identity";
 
 export const metadata: Metadata = {
   title: "Submit yourself — Paytag",
@@ -8,7 +9,18 @@ export const metadata: Metadata = {
     "Say what you contribute to the Stellar ecosystem, and let people pay your handle for it.",
 };
 
-export default function SubmitPage() {
+export default async function SubmitPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ for?: string; auth_error?: string }>;
+}) {
+  // `?for=gh|x` — which handle the card is being written for. It is how the
+  // OAuth round trip comes back to the question it left on: the sign-in this
+  // page starts sets `next=/app/submit?for=x`, so the reader returns with X
+  // already selected instead of having to pick it again.
+  const { for: on, auth_error: authError } = await searchParams;
+  const hintKind = on !== undefined && isKindSlug(on) ? KIND_SLUG[on] : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -22,12 +34,12 @@ export default function SubmitPage() {
           Submit yourself
         </h1>
         <p className="mt-2 max-w-xl text-dim">
-          A role and two fields. It puts you in the list, where people pay your
-          handle.
+          One handle, a role and two fields. It puts you in the list, where
+          people pay that handle.
         </p>
       </div>
 
-      <CardEditor />
+      <CardEditor hintKind={hintKind} authError={authError} />
     </div>
   );
 }
