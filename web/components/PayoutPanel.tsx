@@ -9,6 +9,7 @@ import { GithubMark, XMark } from "./icons";
 import { KIND } from "@/lib/identity";
 import { shortAddr } from "@/lib/format";
 import { describePayoutProblem, normalizePayout } from "@/lib/payout";
+import { describeWriteError } from "@/lib/db-errors";
 import { accountExists } from "@/lib/stellar";
 import { NETWORK } from "@/lib/config";
 
@@ -101,7 +102,7 @@ export default function PayoutPanel({ empty }: { empty: string }) {
       setDraft("");
       setDone("Locked in.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save that.");
+      setError(describeWriteError(e));
     } finally {
       setBusy(false);
     }
@@ -123,7 +124,7 @@ export default function PayoutPanel({ empty }: { empty: string }) {
       setDraft("");
       setDone("Back to the connected wallet.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not clear that.");
+      setError(describeWriteError(e));
     } finally {
       setBusy(false);
     }

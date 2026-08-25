@@ -70,6 +70,16 @@ does not shuffle the layout sideways. Hashes and addresses use `.mono`, always
 shortened, always with a copy button — truncating without one is hiding
 evidence.
 
+A balance is shortened by the same rule. The header chip shows whole tokens and
+the dollar value in parentheses — `9,973 XLM ($1,212)` — because seven decimal
+places are not a quantity anyone reads at a glance. Two conditions come with it:
+it **floors**, since a balance shown higher than it is invites a transaction
+that fails, and the exact figure sits one click away in the account menu. A
+rounded number with no way to reach the real one is the same mistake as a
+truncated hash with no copy button. The dollar figure is parenthesised because
+it is an estimate, and when the rate cannot be fetched the parentheses
+disappear — never a `$0`, which reads as a balance.
+
 ---
 
 ## Words

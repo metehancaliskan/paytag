@@ -6,6 +6,8 @@ import {
   ledgersToHuman,
   shortAddr,
   toUnits,
+  usdGlance,
+  wholeUnits,
 } from "./format";
 
 /**
@@ -125,5 +127,42 @@ describe("shortAddr", () => {
 
   it("leaves a short string alone", () => {
     expect(shortAddr("GABC")).toBe("GABC");
+  });
+});
+
+describe("wholeUnits", () => {
+  it("drops the decimals for a glance", () => {
+    expect(wholeUnits(99739455807n)).toBe("9,973");
+    expect(wholeUnits(10_000_000n)).toBe("1");
+  });
+
+  it("floors rather than rounds", () => {
+    // 9973.9455807 must never be shown as 9974: a balance displayed higher
+    // than it is invites a transaction that cannot go through.
+    expect(wholeUnits(99739999999n)).toBe("9,973");
+    expect(wholeUnits(9_999_999n)).toBe("0");
+  });
+
+  it("groups thousands and keeps a sign", () => {
+    expect(wholeUnits(12_345_678_900_000n)).toBe("1,234,567");
+    expect(wholeUnits(-99739455807n)).toBe("-9,973");
+  });
+});
+
+describe("usdGlance", () => {
+  it("keeps the cents where they are the information", () => {
+    expect(usdGlance(405n)).toBe("$4.05");
+    expect(usdGlance(0n)).toBe("$0.00");
+    expect(usdGlance(999n)).toBe("$9.99");
+  });
+
+  it("drops them once they are noise", () => {
+    expect(usdGlance(1000n)).toBe("$10");
+    expect(usdGlance(121_344n)).toBe("$1,213");
+  });
+
+  it("survives a negative, rather than printing $-", () => {
+    expect(usdGlance(-405n)).toBe("-$4.05");
+    expect(usdGlance(-121_344n)).toBe("-$1,213");
   });
 });

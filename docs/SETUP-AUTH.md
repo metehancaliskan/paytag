@@ -163,6 +163,17 @@ cd web && pnpm install && pnpm dev
    makes `claim_nonces` survive an account deletion). Both are safe to run
    twice and print `Migration NNN applied.` when they worked. A project created
    from today's `schema.sql` already has all of it.
+
+   The symptom of skipping this is a red line under **Publish my card**:
+
+   ```
+   Could not find the 'role' column of 'cards' in the schema cache
+   ```
+
+   That is PostgREST reporting what it has, not a bug — it serves the REST API
+   from a cached copy of the schema. Every migration ends with
+   `notify pgrst, 'reload schema';` so the reload happens as part of running it;
+   if you changed the schema by hand, run that line on its own.
 1. Open `/profile` — or the account menu in the header —
    and press **Continue with GitHub**.
 2. Approve. You land back where you started, showing `@you` with a

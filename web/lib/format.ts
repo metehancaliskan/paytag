@@ -18,6 +18,42 @@ export function fromUnits(units: bigint, decimals = DEFAULT_DECIMALS): string {
 }
 
 /**
+ * The same amount, for a glance: whole tokens, thousands grouped, no decimals.
+ *
+ * For the header chip, where seven decimal places are noise — nobody reads
+ * "9973.9455807" as a quantity, they read the first four characters. It FLOORS
+ * rather than rounds: a balance shown higher than it is invites a transaction
+ * that fails, and "at least this much" is the only safe direction to lie in.
+ *
+ * The exact figure has to stay one click away (the account menu prints it in
+ * full), for the same reason a shortened hash always keeps a copy button.
+ */
+export function wholeUnits(units: bigint, decimals = DEFAULT_DECIMALS): string {
+  const neg = units < 0n;
+  const abs = neg ? -units : units;
+  const whole = abs / 10n ** BigInt(decimals);
+  return (neg ? "-" : "") + whole.toLocaleString("en-US");
+}
+
+/**
+ * Cents → a dollar figure short enough to sit in parentheses.
+ *
+ * Under ten dollars the cents are the information ("$4.05"); above it they are
+ * three characters of noise on a number that is an estimate anyway ("$1,213").
+ */
+export function usdGlance(cents: bigint): string {
+  const neg = cents < 0n;
+  const abs = neg ? -cents : cents;
+  const sign = neg ? "-" : "";
+  if (abs < 1000n) {
+    const whole = abs / 100n;
+    const rest = (abs % 100n).toString().padStart(2, "0");
+    return `${sign}$${whole}.${rest}`;
+  }
+  return `${sign}$${(abs / 100n).toLocaleString("en-US")}`;
+}
+
+/**
  * Turns input like "12.5" into chain units.
  * Never goes through a float: the 0.1 + 0.2 problem is not acceptable in money.
  */

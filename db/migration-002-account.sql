@@ -184,4 +184,17 @@ begin
   raise notice 'migration 002 applied: payout_prefs exists with 4 policies, nonce records survive account deletion.';
 end $$;
 
+-- ------------------------------------------------- tell the API about it
+--
+-- PostgREST serves Supabase's REST API from a CACHED copy of the schema. After
+-- a DDL change it keeps answering from the old one, and a write to the new
+-- column fails with:
+--
+--   Could not find the 'role' column of 'cards' in the schema cache
+--
+-- which reads like an application bug and is not one. This makes the reload
+-- part of the migration instead of a thing somebody has to know.
+
+notify pgrst, 'reload schema';
+
 select 'Migration 002 applied.' as result;

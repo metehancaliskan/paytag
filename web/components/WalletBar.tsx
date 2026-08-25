@@ -8,7 +8,9 @@ import { PROVIDERS } from "./providers";
 import CopyButton from "./CopyButton";
 import { CheckMark, ChevronDown, ChevronRight, GithubMark } from "./icons";
 import { tokenBalance } from "@/lib/contract";
-import { fromUnits, shortAddr } from "@/lib/format";
+import { fromUnits, shortAddr, usdGlance, wholeUnits } from "@/lib/format";
+import { unitsToCents } from "@/lib/price";
+import { usePrice } from "./usePrice";
 import { DEFAULT_TOKEN, X_ENABLED, explorerAccount } from "@/lib/config";
 
 /**
@@ -34,7 +36,7 @@ export default function WalletBar() {
   // The balance is stored together with the address it belongs to. When the
   // user switches wallets, a stale balance must not appear next to the new
   // address for even one frame.
-  const [info, setInfo] = useState<{ addr: string; balance: string } | null>(
+  const [info, setInfo] = useState<{ addr: string; units: bigint } | null>(
     null,
   );
   const [open, setOpen] = useState(false);
@@ -45,6 +47,12 @@ export default function WalletBar() {
   // which is true on chain and meaningless to a reader looking at a balance.
   const symbol = DEFAULT_TOKEN.symbol;
 
+  // The dollar figure beside the balance. It is an estimate and it is labelled
+  // as one by being in parentheses; nothing on chain is denominated in it, and
+  // when the rate cannot be fetched the parentheses simply do not appear —
+  // better than a "$0" that reads as a balance.
+  const price = usePrice();
+
   useEffect(() => {
     if (!address) return;
     let alive = true;
@@ -52,7 +60,7 @@ export default function WalletBar() {
       try {
         const bal = await tokenBalance(address);
         if (!alive) return;
-        setInfo({ addr: address, balance: fromUnits(bal) });
+        setInfo({ addr: address, units: bal });
       } catch {
         // Without a trustline the SAC can refuse to report a balance. That
         // does not deserve an error screen; we just hide the number.
@@ -82,6 +90,12 @@ export default function WalletBar() {
   }, [open]);
 
   const shown = info && info.addr === address ? info : null;
+  const usd =
+    shown && price.status === "ready"
+      ? usdGlance(
+          unitsToCents(shown.units, price.price.usdPerXlm, DEFAULT_TOKEN.decimals),
+        )
+      : null;
 
   if (installed === false) {
     return (
@@ -141,7 +155,10 @@ export default function WalletBar() {
         )}
         {shown && (
           <span className="num text-sm font-semibold text-accent-text">
-            {shown.balance} {symbol}
+            {wholeUnits(shown.units, DEFAULT_TOKEN.decimals)} {symbol}
+            {usd && (
+              <span className="ml-1.5 font-medium text-mute">({usd})</span>
+            )}
           </span>
         )}
         {/* On a phone the balance and the address together wrap the chip onto
@@ -249,10 +266,20 @@ export default function WalletBar() {
               the height of this menu. */}
           <div className="menu-row justify-between">
             <span className="menu-label">Wallet</span>
-            {/* No balance here: the button that opened this menu is already
-                showing it, and repeating a number is how a panel gets tall. */}
             <span className="mono text-dim">{shortAddr(address)}</span>
           </div>
+
+          {/* The chip above rounds to whole XLM so it can be read at a glance.
+              The exact figure belongs here, one click away — a rounded balance
+              with no way to see the real one is the same mistake as a truncated
+              hash with no copy button. */}
+          {shown && (
+            <p className="num px-2.5 pb-1 text-sm">
+              {fromUnits(shown.units, DEFAULT_TOKEN.decimals)}{" "}
+              <span className="text-xs font-semibold text-dim">{symbol}</span>
+              {usd && <span className="ml-1.5 text-mute">· {usd}</span>}
+            </p>
+          )}
 
           {mismatch && (
             <p role="alert" className="menu-row text-xs leading-relaxed text-warn">

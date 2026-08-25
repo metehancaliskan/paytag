@@ -9,6 +9,7 @@ import CopyButton from "./CopyButton";
 import { GithubMark, XMark } from "./icons";
 import { KIND, kindUrlPrefix, slugOf } from "@/lib/identity";
 import { parseLink, type PersonCard } from "@/lib/cards";
+import { describeWriteError } from "@/lib/db-errors";
 import {
   ECOSYSTEMS,
   MAX_LINKS,
@@ -221,7 +222,7 @@ export default function CardEditor() {
       if (e) throw new Error(e.message);
       setSavedAt(Date.now());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeWriteError(e));
     } finally {
       setBusy(false);
     }
