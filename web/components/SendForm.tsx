@@ -16,11 +16,12 @@ import { sign, networkMismatch } from "@/lib/freighter";
 import { fromHex } from "@/lib/identity";
 import {
   formatDate,
+  displayUnits,
   fromUnits,
   ledgerToApproxDate,
   toUnits,
 } from "@/lib/format";
-import { centsToUnits, formatRate, unitsToCents, usdToCents } from "@/lib/price";
+import { centsToUnits, unitsToCents, usdToCents } from "@/lib/price";
 import {
   DEFAULT_TOKEN,
   EXPIRY_CHOICES,
@@ -79,8 +80,9 @@ export default function SendForm({
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<{
     hash: string;
-    amount: string;
+    units: bigint;
     symbol: string;
+    decimals: number;
   } | null>(null);
 
   const amountId = useId();
@@ -133,7 +135,7 @@ export default function SendForm({
       if (units <= 0n) {
         problem = "The amount has to be greater than zero.";
       } else if (balance !== null && units > balance) {
-        problem = `That is more than your balance of ${fromUnits(
+        problem = `That is more than your balance of ${displayUnits(
           balance,
           token.decimals,
         )} ${token.symbol}.`;
@@ -190,8 +192,12 @@ export default function SendForm({
 
       setSent({
         hash: res.hash,
-        amount: fromUnits(units, token.decimals),
+        // The units, not a formatted string: the receipt shows the rounded
+        // figure and carries the exact one on hover, and it can only do both if
+        // it still has the number.
+        units,
         symbol: token.symbol,
+        decimals: token.decimals,
       });
       setAmountInput("");
       void loadBalance();
@@ -217,8 +223,13 @@ export default function SendForm({
           </span>
           <div className="min-w-0">
             <h2 className="font-semibold">
-              <span className="num">{sent.amount}</span> {sent.symbol} is in
-              escrow for @{handle}
+              <span
+                className="num"
+                title={`${fromUnits(sent.units, sent.decimals)} ${sent.symbol}`}
+              >
+                {displayUnits(sent.units, sent.decimals)}
+              </span>{" "}
+              {sent.symbol} is in escrow for @{handle}
             </h2>
             <p className="mt-1 text-sm text-dim">
               Only the verified owner can move it
@@ -257,18 +268,16 @@ export default function SendForm({
   return (
     <div className="card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-semibold">Put money in escrow for @{handle}</h2>
+        <h2 className="font-semibold">Put money in escrow</h2>
         {address && balance !== null && (
-          <span className="num text-xs text-mute">
-            balance {fromUnits(balance, token.decimals)} {token.symbol}
+          <span
+            className="num text-xs text-mute"
+            title={`${fromUnits(balance, token.decimals)} ${token.symbol}`}
+          >
+            balance {displayUnits(balance, token.decimals)} {token.symbol}
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm text-mute">
-        Refundable to you{" "}
-        {refundableOn ? <>from around {refundableOn}</> : <>after expiry</>} if
-        it goes unclaimed.
-      </p>
 
       {TOKENS.length > 1 && (
         <div className="mt-4">
@@ -349,35 +358,33 @@ export default function SendForm({
               </button>
             ))}
           </div>
+          {/* Said next to the control that sets it, not in a paragraph at the
+              top of the form where it is read before it can mean anything. */}
+          {refundableOn && (
+            <p className="mt-1 text-xs text-mute">
+              Unclaimed: back to you {refundableOn}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* What will actually leave the wallet, and at what rate. */}
+      {/* What will actually leave the wallet. Approximate on screen and exact
+          on hover: the conversion is an estimate, and where the provider of the
+          rate came from is not the reader's business. */}
       {!token.isDollarPegged && (
         <p className="mt-2 text-xs text-mute">
-          {priceState.status === "loading" && "Fetching the XLM rate…"}
-          {priceState.status === "unavailable" && (
+          {priceState.status === "loading" && "…"}
+          {priceState.status === "unavailable" &&
+            "No rate right now — the amount above is in XLM."}
+          {priceState.status === "ready" && units !== null && !problem && (
             <>
-              No exchange rate available ({priceState.reason}), so the amount is
-              in XLM.
-            </>
-          )}
-          {priceState.status === "ready" && (
-            <>
-              {units !== null && !problem ? (
-                <>
-                  Sends{" "}
-                  <span className="num font-semibold text-dim">
-                    {fromUnits(units, token.decimals)} XLM
-                  </span>{" "}
-                  · {formatRate(priceState.price)} ·{" "}
-                  {priceState.price.source}
-                </>
-              ) : (
-                <>
-                  {formatRate(priceState.price)} · {priceState.price.source}
-                </>
-              )}
+              Sends{" "}
+              <span
+                className="num font-semibold text-dim"
+                title={`${fromUnits(units, token.decimals)} ${token.symbol}`}
+              >
+                ≈ {displayUnits(units, token.decimals)} {token.symbol}
+              </span>
             </>
           )}
         </p>
@@ -424,21 +431,18 @@ export default function SendForm({
         </span>
       </div>
 
-      {/* The honest caveat. A dollar figure implies a promise the chain never
-          made, so it is said plainly rather than left to be discovered. */}
+      {/* The honest caveat, in one line. A dollar figure implies a promise the
+          chain never made, and that has to be said — it does not have to be
+          said in four. */}
       {!token.isDollarPegged && priceState.status === "ready" && (
-        <p className="mt-3 text-xs leading-relaxed text-mute">
-          The escrow holds XLM, not dollars. The recipient claims the XLM
-          amount, worth whatever it is worth then — the dollar figure is
-          today&apos;s rate, for your reference only.
+        <p className="mt-3 text-xs text-mute">
+          The escrow holds XLM, not dollars.
         </p>
       )}
 
       {token.needsTrustline && (
-        <p className="mt-3 text-xs leading-relaxed text-mute">
-          {token.symbol} is an issued asset, so both wallets need a trustline
-          for it before they can hold it. XLM needs none — that is why it is the
-          default.
+        <p className="mt-3 text-xs text-mute">
+          {token.symbol} needs a trustline on both wallets. XLM needs none.
         </p>
       )}
 

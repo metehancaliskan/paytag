@@ -480,11 +480,18 @@ stated on the screen rather than left to be discovered:
   balance depends on the rate. It is a label on an input box.
 - **The escrow holds XLM.** Whoever claims receives the XLM amount, worth
   whatever it is worth then. A dollar figure implies a stability the chain never
-  promised, so the form says outright that the amount is denominated in XLM.
+  promised, so the form says outright that the amount is denominated in XLM, and
+  the converted figure is written with a `≈`.
 - **A missing rate degrades, it does not block.** If the price endpoint fails,
   the field switches to accepting XLM directly and says why. Refusing to let
   someone send money because a third-party price API is down would be the wrong
   trade every time.
+- **The provider is not named.** Neither the response nor the interface says
+  which service was asked. An earlier version printed it, on the theory that
+  attribution is honesty; the opposite turned out to be true — a named source
+  reads as a quote from an authority, when the number is an estimate we happen
+  to have fetched. What the reader is told is what actually matters: this is
+  approximate, and the escrow holds XLM.
 
 Conversion arithmetic is integer-only (`lib/price.ts`): the rate is turned into
 a scaled integer once and every step after that is exact, rounding toward zero
@@ -669,11 +676,19 @@ other half: a place where the people worth paying say who they are.
 
 ### 8.1 Three kinds of user, two kinds of card
 
-| User | What they do here | Card? |
-|---|---|---|
-| Community member | Browses, picks somebody, sends. | No |
-| Amplifier (`shiller`) | Threads, posts, explainers, spaces. | Yes |
-| Developer (`dev`) | Contracts, tools, SDKs, docs, fixes. | Yes |
+| User | Shown as | What they do here | Card? |
+|---|---|---|---|
+| Sender | *Sender* | Browses, picks somebody, sends. | No |
+| `shiller` | *Community* | Threads, posts, explainers, spaces. | Yes |
+| `dev` | *Developer* | Contracts, tools, SDKs, docs, fixes. | Yes |
+
+The middle column is the label, and it is deliberately not the key. `shiller`
+is what `cards.role` stores and what `?role=` filters on; *Community* is what
+the chip says. Renaming the stored value to match would cost a migration, a
+rewritten check constraint and every shared `?role=shiller` link, to change a
+word that only appears in this repository. The person who only sends is called
+*Sender* on the landing page for the same reason the other one is not: one word
+cannot mean both the payer and the paid.
 
 A community member gets no card on purpose: nobody needs to be convinced to
 accept a gift, so a card for a sender would be a page nobody reads. The two

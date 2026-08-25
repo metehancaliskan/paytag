@@ -38,7 +38,7 @@ type Loaded = {
 };
 
 /**
- * Where a developer or an amplifier writes what they do.
+ * Where a developer or a community contributor writes what they do.
  *
  * The card is a shop window, nothing more: the money is bound to the handle's
  * identity key on chain, so a card cannot redirect a payment and losing one

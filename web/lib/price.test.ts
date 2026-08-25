@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   centsToUnits,
   centsToUsd,
-  formatRate,
   unitsToCents,
   usdToCents,
 } from "./price";
@@ -99,13 +98,5 @@ describe("unitsToCents — what an existing escrow is worth today", () => {
     // dollar column, not take the page down.
     expect(unitsToCents(toUnits("100"), 0)).toBe(0n);
     expect(unitsToCents(toUnits("100"), Number.NaN)).toBe(0n);
-  });
-});
-
-describe("formatRate", () => {
-  it("shows enough digits to explain the conversion", () => {
-    expect(
-      formatRate({ usdPerXlm: 0.2734, source: "test", fetchedAt: 0 }),
-    ).toBe("1 XLM = $0.2734");
   });
 });

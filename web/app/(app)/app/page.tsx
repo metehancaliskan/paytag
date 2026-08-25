@@ -9,7 +9,7 @@ import { KIND, type IdentityKind } from "@/lib/identity";
 export const metadata: Metadata = {
   title: "Discover — Paytag",
   description:
-    "Developers and amplifiers in the Stellar ecosystem, each one payable by handle. The money waits in escrow until they withdraw it.",
+    "Developers and community contributors in the Stellar ecosystem, each one payable by handle. The money waits in escrow until they withdraw it.",
 };
 
 /** ?on=gh | x — which platform the handle lives on. */

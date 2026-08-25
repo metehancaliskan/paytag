@@ -225,10 +225,8 @@ export function NoCardYet({
   return (
     <div className="card p-5 text-sm text-mute">
       <p>
-        {kindUrlPrefix(kind)}
-        {handle} has not written a card yet. You can still pay the handle —{" "}
-        the money waits in escrow until they verify the account, and comes back
-        to the sender if nobody does.
+        No card yet. {kindUrlPrefix(kind)}
+        {handle} is payable anyway.
       </p>
     </div>
   );

@@ -27,10 +27,16 @@ export type Role = {
   blurb: string;
 };
 
+/**
+ * The KEY is what the database stores; the LABEL is what a reader sees, and the
+ * two are allowed to differ. `shiller` stays the stored value — renaming it
+ * would mean a migration, a rewritten check constraint and dead `?role=` links,
+ * all to change a word nobody outside this file ever sees.
+ */
 export const ROLES: Record<RoleKey, Role> = {
   shiller: {
     key: "shiller",
-    label: "Amplifier",
+    label: "Community",
     pick: "I bring people in",
     blurb: "Threads, posts, explainers, spaces — attention you created.",
   },

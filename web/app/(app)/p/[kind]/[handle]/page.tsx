@@ -107,7 +107,7 @@ export default async function ProfilePage({ params }: Params) {
       </div>
 
       <div className="card p-5">
-        <p className="mb-3 text-sm text-mute">Send to a different identity</p>
+        <p className="mb-3 text-sm text-mute">Pay someone else</p>
         <HandleSearch />
       </div>
     </div>
@@ -189,23 +189,24 @@ function IdentityCard({
         </dl>
       )}
 
+      {/* Both of these used to be paragraphs. The fact each one carries is one
+          clause long; the rest was reassurance nobody asked for. */}
       {!profile && kind === KIND.GithubUser && (
-        <p className="mt-4 text-sm leading-relaxed text-mute">
-          Not found on GitHub, or the rate limit is spent. You can still send —
-          the contract binds money to the handle&apos;s bytes, not to a profile.
+        <p className="mt-4 text-sm text-mute">
+          No GitHub preview. You can still send.
         </p>
       )}
 
       {kind === KIND.XUser && (
-        <p className="mt-4 text-sm leading-relaxed text-mute">
-          X profiles need API access, so we do not preview them.{" "}
+        <p className="mt-4 text-sm text-mute">
+          No X preview —{" "}
           <a
             className="link"
             href={profileUrl(kind, handle)}
             target="_blank"
             rel="noreferrer"
           >
-            Check the account yourself
+            check the account
           </a>{" "}
           before paying.
         </p>

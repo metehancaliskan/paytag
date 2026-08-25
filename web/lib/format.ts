@@ -36,6 +36,28 @@ export function wholeUnits(units: bigint, decimals = DEFAULT_DECIMALS): string {
 }
 
 /**
+ * An amount as the interface shows it: whole tokens, no decimals.
+ *
+ * Seven decimal places are what the chain stores, not what a person reads —
+ * "26.1643118 XLM" is four characters of quantity and six of noise. So every
+ * human-facing amount is floored to whole tokens, and the exact figure stays
+ * reachable: a `title` on the element, the explorer link beside it, and the
+ * account menu for a balance.
+ *
+ * Below one token it falls back to the exact value. Flooring 0.42 to "0" would
+ * not be brevity, it would be wrong — and a sub-unit amount is already short.
+ */
+export function displayUnits(
+  units: bigint,
+  decimals = DEFAULT_DECIMALS,
+): string {
+  const abs = units < 0n ? -units : units;
+  return abs >= 10n ** BigInt(decimals)
+    ? wholeUnits(units, decimals)
+    : fromUnits(units, decimals);
+}
+
+/**
  * Cents → a dollar figure short enough to sit in parentheses.
  *
  * Under ten dollars the cents are the information ("$4.05"); above it they are

@@ -28,7 +28,7 @@ export default function ShareLink({ path }: { path: string }) {
 
   return (
     <div className="card p-4">
-      <p className="text-xs text-mute">Shareable pay link</p>
+      <p className="text-xs text-mute">Pay link</p>
       <p className="mono mt-1 truncate text-dim" title={url}>
         {url}
       </p>

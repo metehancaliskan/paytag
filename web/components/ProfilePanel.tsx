@@ -12,13 +12,8 @@ import {
   type Payment,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import {
-  KIND,
-  kindByteHex,
-  kindLabel,
-  type IdentityKind,
-} from "@/lib/identity";
-import { fromUnits } from "@/lib/format";
+import { KIND, kindByteHex, type IdentityKind } from "@/lib/identity";
+import { displayUnits, fromUnits } from "@/lib/format";
 import { DEFAULT_TOKEN, tokenByContractId } from "@/lib/config";
 
 type Props = { handle: string; identityHex: string; kind: IdentityKind };
@@ -106,11 +101,14 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
         ) : (
           // A failed read must not render as a confident zero — "0 USDC in
           // escrow" and "we could not ask" are very different facts.
-          <p className="num mt-1 text-3xl font-bold tracking-tight text-accent-text">
+          <p
+            className="num mt-1 text-3xl font-bold tracking-tight text-accent-text"
+            title={loadError ? undefined : `${fromUnits(total)} ${headlineAsset.symbol}`}
+          >
             {loadError ? (
               <span className="text-mute">—</span>
             ) : (
-              fromUnits(total)
+              displayUnits(total)
             )}{" "}
             <span className="text-lg font-semibold text-dim">
               {headlineAsset.symbol}
@@ -124,17 +122,15 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
           ) : loadError ? (
             "the chain could not be read"
           ) : (
+            // No "GitHub · @handle" here: the whole page is about them, and
+            // the identity card says it once already.
             <>
-              {pending.length} {pending.length === 1 ? "payment" : "payments"} ·{" "}
-              {kindLabel(kind)} · @{handle}
+              {pending.length} waiting
               {payments.length > pending.length && (
-                <> · {payments.length - pending.length} already settled</>
+                <> · {payments.length - pending.length} settled</>
               )}
               {otherAssets.length > 0 && (
-                <>
-                  {" "}
-                  · {otherAssets.length} in another asset, listed below
-                </>
+                <> · {otherAssets.length} in another asset</>
               )}
             </>
           )}
@@ -142,22 +138,16 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
 
         {claimable.length > 0 && (
           <p className="mt-3 text-sm text-dim">
-            <span className="num font-semibold text-accent-text">
-              {fromUnits(claimableTotal)} {headlineAsset.symbol}
+            <span
+              className="num font-semibold text-accent-text"
+              title={`${fromUnits(claimableTotal)} ${headlineAsset.symbol}`}
+            >
+              {displayUnits(claimableTotal)} {headlineAsset.symbol}
             </span>{" "}
-            still claimable.{" "}
-            {kind === KIND.GithubUser ? (
-              // Only GitHub can be verified today, so only GitHub gets an
-              // invitation to try. Offering it for X would send someone to a
-              // button that cannot work.
-              <Link className="link" href={`/claim?handle=${handle}`}>
-                Is this you?
-              </Link>
-            ) : (
-              <span className="text-mute">
-                X verification is not live yet, so it cannot be withdrawn.
-              </span>
-            )}
+            claimable ·{" "}
+            <Link className="link" href={`/claim?handle=${handle}`}>
+              Is this you?
+            </Link>
           </p>
         )}
 

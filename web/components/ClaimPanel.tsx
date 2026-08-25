@@ -26,7 +26,7 @@ import {
   slugOf,
 } from "@/lib/identity";
 import { claimDestination } from "@/lib/payout";
-import { fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
+import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
 import {
   DEFAULT_TOKEN,
   X_ENABLED,
@@ -78,7 +78,7 @@ export default function ClaimPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<{
     hash: string;
-    amount: string;
+    units: bigint;
     /** Recorded rather than re-read: it is where the money actually went. */
     to: string;
   } | null>(null);
@@ -172,7 +172,7 @@ export default function ClaimPanel({
 
       setBusy("Submitting…");
       const out = await submitSigned(signed);
-      setClaimed({ hash: out.hash, amount: fromUnits(total), to });
+      setClaimed({ hash: out.hash, units: total, to });
 
       const [list, seq] = await Promise.all([
         listPaymentsForIdentity(verified.identityHex),
@@ -194,8 +194,10 @@ export default function ClaimPanel({
       <div className="card p-6">
         <span className="badge badge-claimed">claimed</span>
         <h2 className="mt-3 text-xl font-semibold">
-          <span className="num">{claimed.amount}</span> {DEFAULT_TOKEN.symbol}{" "}
-          is in your wallet
+          <span className="num" title={`${fromUnits(claimed.units)} ${DEFAULT_TOKEN.symbol}`}>
+            {displayUnits(claimed.units)}
+          </span>{" "}
+          {DEFAULT_TOKEN.symbol} is in your wallet
         </h2>
         <p className="mono mt-1 text-mute">{claimed.to}</p>
         <div className="mt-4 flex flex-wrap gap-2">
@@ -340,8 +342,11 @@ export default function ClaimPanel({
           <div className="skeleton h-9 w-32" />
         ) : (
           <>
-            <p className="num text-3xl font-bold tracking-tight text-accent-text">
-              {fromUnits(total)}{" "}
+            <p
+              className="num text-3xl font-bold tracking-tight text-accent-text"
+              title={`${fromUnits(total)} ${DEFAULT_TOKEN.symbol}`}
+            >
+              {displayUnits(total)}{" "}
               <span className="text-lg font-semibold text-dim">
                 {DEFAULT_TOKEN.symbol}
               </span>
@@ -353,8 +358,11 @@ export default function ClaimPanel({
                     key={p.id}
                     className="flex flex-wrap items-center gap-x-4 gap-y-1"
                   >
-                    <span className="num font-semibold">
-                      {fromUnits(p.amount)}{" "}
+                    <span
+                      className="num font-semibold"
+                      title={`${fromUnits(p.amount)} ${DEFAULT_TOKEN.symbol}`}
+                    >
+                      {displayUnits(p.amount)}{" "}
                       <span className="text-mute">{DEFAULT_TOKEN.symbol}</span>
                     </span>
                     <span className="mono text-xs text-mute">
@@ -426,7 +434,7 @@ export default function ClaimPanel({
                 disabled={busy !== null || claimable.length === 0}
               >
                 {busy !== null && <span className="spinner" aria-hidden />}
-                {busy ?? `Claim ${fromUnits(total)} ${DEFAULT_TOKEN.symbol}`}
+                {busy ?? `Claim ${displayUnits(total)} ${DEFAULT_TOKEN.symbol}`}
               </button>
               <span aria-live="polite" className="text-sm text-mute">
                 {busy}

@@ -70,15 +70,27 @@ does not shuffle the layout sideways. Hashes and addresses use `.mono`, always
 shortened, always with a copy button — truncating without one is hiding
 evidence.
 
-A balance is shortened by the same rule. The header chip shows whole tokens and
-the dollar value in parentheses — `9,973 XLM ($1,212)` — because seven decimal
-places are not a quantity anyone reads at a glance. Two conditions come with it:
-it **floors**, since a balance shown higher than it is invites a transaction
-that fails, and the exact figure sits one click away in the account menu. A
-rounded number with no way to reach the real one is the same mistake as a
-truncated hash with no copy button. The dollar figure is parenthesised because
-it is an estimate, and when the rate cannot be fetched the parentheses
-disappear — never a `$0`, which reads as a balance.
+**Every amount on screen is whole tokens.** `displayUnits()` in `lib/format.ts`
+is the one function that renders money for reading: it floors to whole tokens
+and groups thousands — `9,973 XLM`, not `9973.9455807 XLM` — because seven
+decimal places are what the chain stores, not what a person reads. Three
+conditions come with that:
+
+- It **floors**. A balance shown higher than it is invites a transaction that
+  fails, and "at least this much" is the only safe direction to be wrong in.
+- Below one token it falls back to the exact value. Flooring `0.42` to `0` is
+  not brevity, it is a different number.
+- The exact figure stays reachable — a `title` on the element, the account menu
+  for a balance, the explorer link beside a payment. A rounded number with no
+  way to reach the real one is the same mistake as a truncated hash with no copy
+  button.
+
+The one exception is an input: "Max" fills the field with the exact spendable
+balance, because that number is about to be sent, not read.
+
+A dollar figure is always parenthesised or prefixed with `≈`, and it never names
+where the rate came from. When the rate cannot be fetched it disappears
+entirely — never a `$0`, which reads as a balance.
 
 ---
 

@@ -11,7 +11,7 @@ import {
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { sign, networkMismatch } from "@/lib/freighter";
-import { fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
+import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
 import { explorerAccount, explorerTx, tokenByContractId } from "@/lib/config";
 
 const STATUS_LABEL: Record<number, { text: string; cls: string }> = {
@@ -70,7 +70,7 @@ export default function PaymentList({
       <div className="flex items-baseline justify-between gap-3 px-5 py-3.5 divider border-t-0">
         <h2 className="text-sm font-semibold">Payments</h2>
         <span className="text-xs text-mute">
-          {payments.length} total · newest first
+          {payments.length} {payments.length === 1 ? "payment" : "payments"}
         </span>
       </div>
 
@@ -152,8 +152,11 @@ function PaymentRow({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="num text-xs text-mute">#{p.id}</span>
 
-        <span className="num text-sm font-semibold">
-          {fromUnits(p.amount, asset?.decimals)}{" "}
+        <span
+          className="num text-sm font-semibold"
+          title={`${fromUnits(p.amount, asset?.decimals)} ${asset?.symbol ?? ""}`}
+        >
+          {displayUnits(p.amount, asset?.decimals)}{" "}
           <span className="text-mute">{asset?.symbol ?? "tokens"}</span>
         </span>
 
@@ -195,15 +198,13 @@ function PaymentRow({
             {busy !== null && <span className="spinner" aria-hidden />}
             {busy ?? "Refund to me"}
           </button>
-          <span className="text-xs text-mute">
-            Window closed unclaimed. Only you can pull it back.
-          </span>
+          <span className="text-xs text-mute">Only you can pull it back.</span>
         </div>
       )}
 
       {p.status === STATUS.Pending && expired && !isSender && (
         <p className="mt-2 text-xs text-mute">
-          Past its window — waiting for the sender to refund it.
+          Past its window — the sender can take it back.
         </p>
       )}
 

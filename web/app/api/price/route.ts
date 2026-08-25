@@ -15,8 +15,11 @@ export const revalidate = 60;
  *
  * This is a mainnet market rate even when the app runs on testnet. The testnet
  * XLM in escrow is worth nothing at all, so the dollar figure there is a
- * dressed-up placeholder — which is exactly why the response carries `source`
- * and the UI prints it instead of showing a bare number.
+ * dressed-up placeholder. The upstream provider is deliberately NOT named in
+ * the response or anywhere in the interface: which service we happen to ask is
+ * an implementation detail, and printing it invites a reader to treat the
+ * number as a quote. What the interface says instead is that the figure is
+ * approximate and that the escrow holds XLM — the honest part, kept.
  */
 export async function GET() {
   try {
@@ -37,7 +40,6 @@ export async function GET() {
 
     return NextResponse.json({
       usdPerXlm: usd,
-      source: "CoinGecko",
       fetchedAt: Date.now(),
     });
   } catch (e) {

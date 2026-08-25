@@ -6,6 +6,7 @@ import {
   ledgersToHuman,
   shortAddr,
   toUnits,
+  displayUnits,
   usdGlance,
   wholeUnits,
 } from "./format";
@@ -164,5 +165,30 @@ describe("usdGlance", () => {
   it("survives a negative, rather than printing $-", () => {
     expect(usdGlance(-405n)).toBe("-$4.05");
     expect(usdGlance(-121_344n)).toBe("-$1,213");
+  });
+});
+
+describe("displayUnits", () => {
+  it("shows whole tokens once there is at least one", () => {
+    expect(displayUnits(261643118n)).toBe("26");
+    expect(displayUnits(99739455807n)).toBe("9,973");
+    expect(displayUnits(10_000_000n)).toBe("1");
+  });
+
+  it("keeps the exact value below one token", () => {
+    // Flooring 0.42 to "0" is not brevity, it is a different number — and a
+    // sub-unit amount is short already.
+    expect(displayUnits(4_200_000n)).toBe("0.42");
+    expect(displayUnits(10n)).toBe("0.000001");
+    expect(displayUnits(0n)).toBe("0");
+  });
+
+  it("floors, so nothing reads higher than it is", () => {
+    expect(displayUnits(19_999_999n)).toBe("1");
+  });
+
+  it("respects a token with different decimals", () => {
+    // USDC has 7 on Stellar too, but the parameter is what the caller passes.
+    expect(displayUnits(2_600_000n, 6)).toBe("2");
   });
 });

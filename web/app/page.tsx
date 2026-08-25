@@ -94,7 +94,10 @@ export default function Landing() {
 
             <div className="mt-6 grid gap-4 lg:grid-cols-3">
               <div className="card p-5">
-                <span className="badge">Community</span>
+                {/* "Sender", not "Community" — Community is now the label of a
+                    card role, and one word cannot mean both the person paying
+                    and the person being paid. */}
+                <span className="badge">Sender</span>
                 <h3 className="mt-3 text-lg font-bold">You send</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-mute">
                   Browse who is listed, pick someone whose work you have

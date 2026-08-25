@@ -14,8 +14,6 @@ import { DEFAULT_DECIMALS } from "./format";
 export type Price = {
   /** Dollars per 1 XLM. */
   usdPerXlm: number;
-  /** Where the number came from, shown to the reader rather than hidden. */
-  source: string;
   /** Unix millis when the rate was fetched. */
   fetchedAt: number;
 };
@@ -87,9 +85,4 @@ export function unitsToCents(
   const rateScaled = BigInt(Math.round(usdPerToken * Number(SCALE)));
   const scale = 10n ** BigInt(decimals);
   return (units * rateScaled * CENTS) / (scale * SCALE);
-}
-
-/** A rate formatted for the one line that explains the conversion. */
-export function formatRate(p: Price): string {
-  return `1 XLM = $${p.usdPerXlm.toFixed(4)}`;
 }
