@@ -557,8 +557,24 @@ time.
 Mitigation: keep the default expiry short (the sender can get the money
 back), and put the "you have money waiting" notification front and center
 in the UI for the recipient.
-Roadmap: have the verifier check the handle→ID mapping at `claim` time —
-that closes most of the attack without breaking the tag.
+
+**Implemented (Phase 2.4): the verifier checks the handle→id mapping at claim
+time.** `identities.external_id` is the provider's permanent numeric id, and it
+does not change hands; the handle does. So before signing anything,
+`POST /api/verify/claim-auth` asks GitHub's public profile endpoint what id the
+handle resolves to now, and refuses when it is a different one
+(`lib/github.ts: handleStillBelongsTo`).
+
+Two properties of that check are deliberate:
+
+- **It refuses only on a definite mismatch.** Rate limit, outage, 404 → the
+  answer is `null` and the claim proceeds. GitHub is rate-limited to 60
+  unauthenticated requests an hour per IP, so a check that failed closed would
+  freeze everybody's escrow the moment traffic arrived — a far likelier event
+  than a handle transfer, and a worse one.
+- **X does not get it.** X charges per profile read, so the equivalent call
+  cannot be made on every claim. The gap is stated rather than papered over,
+  and it is the reason the note below matters more for X than for GitHub.
 
 > **On X this risk is bigger.** Giving up a handle is relatively rare on
 > GitHub; on X, account names change, get abandoned and change hands often.

@@ -546,3 +546,5 @@ mod test_deposit;
 mod test_fuzz;
 #[cfg(test)]
 mod test_refund;
+#[cfg(test)]
+mod test_two_identities;

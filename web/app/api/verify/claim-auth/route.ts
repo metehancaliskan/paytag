@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { serverSupabase, adminSupabase } from "@/lib/supabase/server";
 import { KIND, normalizeHandle, type IdentityKind } from "@/lib/identity";
+import { handleStillBelongsTo } from "@/lib/github";
 import {
   claimPreimage,
   identityKeyBytes,
@@ -41,6 +42,9 @@ export const runtime = "nodejs";
  *      order would let a crash hand out a signature with no record of it.
  *   6. The window is short (CLAIM_AUTH_LEDGERS), so a leaked authorization is
  *      stale by the time anyone finds it.
+ *   7. For GitHub, the handle must still resolve to the numeric id we verified.
+ *      A name that changed hands would otherwise leave the old owner able to
+ *      claim what senders left for the new one (SPEC §6.2).
  */
 export async function POST(request: NextRequest) {
   let body: {
@@ -119,6 +123,26 @@ export async function POST(request: NextRequest) {
       403,
       `You are signed in as @${identity.handle}, so you cannot claim @${handle}.`,
     );
+  }
+
+  // The handle-transfer check (SPEC §6.2). `external_id` does not change hands;
+  // the handle does. If GitHub now says this name belongs to a different
+  // account, the person asking is no longer the person senders were paying, and
+  // the verifier stops.
+  //
+  // Only a DEFINITE mismatch refuses. A rate limit or an outage answers `null`
+  // and the claim proceeds: freezing everyone's money whenever GitHub hiccups
+  // would be a worse failure than the transfer it is guarding against. X has no
+  // free equivalent of this call, so X identities skip it — stated here rather
+  // than silently unequal.
+  if (kind === KIND.GithubUser) {
+    const stillTheirs = await handleStillBelongsTo(handle, identity.external_id);
+    if (stillTheirs === false) {
+      return bad(
+        403,
+        `github.com/${handle} now belongs to a different GitHub account than the one verified here. Nothing was signed.`,
+      );
+    }
   }
 
   // A saved payout address is a lock, not a hint. Read with the service role
