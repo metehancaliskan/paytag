@@ -30,12 +30,12 @@ export const AUTH_ERRORS: Record<string, string> = {
   // Supabase refused the link before it started: the provider account is
   // attached to another Supabase user. Used to be swallowed as a cancel.
   link_identity_taken:
-    "That account is signed in as its own Paytag account elsewhere. Sign in as it, delete that account under Settings, then add it here.",
+    "That handle already has its own Paytag account, so it cannot simply be added — bring it here instead.",
   provider_refused: "The provider stopped the sign-in. Nothing was changed.",
   // The provider account is verified on a different Paytag account. Not moved
   // automatically — the fix is the merge, which needs both accounts to say so.
   identity_on_another_account:
-    "That handle is verified on another Paytag account. Use “Join another account” below to bring the two together.",
+    "That handle is verified on another Paytag account — bring it here instead.",
   // Both accounts hold a handle on the same platform. One slot, two cards.
   merge_kind_clash:
     "Both accounts have a handle on the same platform, so they cannot be joined. Delete the one you do not want first.",

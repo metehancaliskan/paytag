@@ -164,8 +164,8 @@ where to look.
 1. `/` loads → the build and the public env vars are fine.
 2. `/app` lists people → Supabase URL and anon key are fine, and RLS lets a
    stranger read published cards.
-3. `/evidence` shows the live contract state → the RPC URL and the escrow
-   address are fine.
+3. A person's page (`/p/gh/<handle>`) shows what is waiting in escrow → the RPC
+   URL and the escrow address are fine.
 4. Sign in with GitHub → the redirect list and the provider are fine.
 5. `/app/submit`, publish a card → your session can write through RLS.
 6. Send a small amount to your own handle from a second wallet, then claim it →
@@ -185,8 +185,11 @@ Nothing here needs hiding — it is already on the pages themselves, and a
 reviewer reads it as care rather than weakness:
 
 - The testnet strip across the top says the money is worth nothing.
-- `/evidence` states that the admin can rotate the verifier key (SPEC §6.4),
-  and lists what has *not* been proven yet.
+- The accepted risks — the admin can rotate the verifier key (SPEC §6.4), and
+  what has *not* been proven yet — are in `docs/SPEC.md` and
+  `docs/evidence/tx-hashes.md`. They used to be on a `/evidence` page in the
+  header; that page was removed, so this repository is now the only place a
+  reviewer finds them. Say so when handing the deployment over.
 - The X button is inert, with the reason in SPEC §7.4.
 
 The mainnet gate, stated once so it does not get lost: §6.4 (admin power over

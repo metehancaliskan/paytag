@@ -63,12 +63,12 @@ export default async function Dashboard({
       )}
 
       {/* Nothing about the reader on this page.
-          It carried two things that have both stopped paying for themselves.
-          A "listed as @you" row, when an account can hold at most two cards and
-          Settings already lists them; and a handle field, when the directory
-          shows everyone and the field still lives where it is actually needed —
-          on a person's page ("pay someone else") and on a 404. The dashboard is
-          about everyone else, so it is only about everyone else. */}
+          It carried two things that stopped paying for themselves: a "listed as
+          @you" row, when an account holds at most two cards and Settings already
+          lists them; and a handle field, when the directory shows everyone. That
+          field now lives in exactly one place — the 404 page, where a mistyped
+          handle actually lands. It used to sit under a person's page too, which
+          read as "or maybe not them". */}
 
       <h1 className="text-2xl font-bold tracking-tight">People to pay</h1>
 

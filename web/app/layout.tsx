@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { WalletProvider } from "@/components/WalletProvider";
-import ThemeToggle, { THEME_INIT_SCRIPT } from "@/components/ThemeToggle";
-import { IS_TESTNET, ESCROW_ID, explorerContract } from "@/lib/config";
+import { IS_TESTNET } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Paytag — pay a GitHub or X handle",
@@ -12,8 +11,18 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root layout: the document, the providers, and the two things every page
- * shares — the testnet strip and the footer.
+ * Root layout: the document, the providers, and the one thing every page
+ * shares — the testnet strip.
+ *
+ * THE THEME IS THE SYSTEM'S. There is no switch and no stored preference: the
+ * palette in `globals.css` swaps on `prefers-color-scheme` and nothing else. A
+ * three-way Light/Dark/Auto control asks a reader to make a decision they have
+ * already made once, in their operating system, and it was the only reason this
+ * document needed an inline script and `suppressHydrationWarning`. Both are
+ * gone with it.
+ *
+ * No footer either. It held a contract link and a licence word under every
+ * screen — a strip nobody came for, on a page whose job is the one above it.
  *
  * The header is NOT here. The site has two kinds of page and they want
  * different chrome: the landing page carries its own marketing header (one
@@ -23,13 +32,7 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    // suppressHydrationWarning: the inline script below sets data-theme before
-    // React sees the document, so the server markup and the DOM differ by that
-    // one attribute on purpose.
-    <html lang="en" className="h-full" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-      </head>
+    <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col">
         <WalletProvider>
           <a className="skip-link" href="#main">
@@ -44,25 +47,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           {children}
 
-          <footer className="border-t border-line">
-            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-5 text-xs text-mute">
-              <span>
-                Escrow{" "}
-                <a
-                  className="mono link"
-                  href={explorerContract(ESCROW_ID)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {ESCROW_ID.slice(0, 6)}…{ESCROW_ID.slice(-4)}
-                </a>
-                {/* The repository link goes here once the repo is public —
-                    docs/SECURITY.md has the checklist that gates that. */}
-                <span className="ml-3">MIT</span>
-              </span>
-              <ThemeToggle />
-            </div>
-          </footer>
         </WalletProvider>
       </body>
     </html>

@@ -50,6 +50,12 @@ an inline mark.
 
 ## Color
 
+**The theme is the reader's operating system.** There is no switch and no stored
+preference: `prefers-color-scheme` decides, and nothing stamps an attribute on
+the document. A Light/Dark/Auto control asks somebody to make a decision they
+already made once, in their OS, and it was the only reason the document needed an
+inline script before React saw it.
+
 One accent, three text tones, one line. That is the whole palette, and it is
 defined once as semantic tokens in `app/globals.css` — never a raw hex in a
 component.
@@ -121,8 +127,11 @@ The rule that governs every screen: **a title, and at most one line under it.**
 - A number with a unit beats an adjective. "0.0000010 XLM" over "a small fee".
 
 Where honesty needs more room than a line — accepted risks, what is not proven
-yet — it goes into a `<details>` or onto `/evidence`, in full. Brevity is for
-the surface, not for the truth.
+yet — it goes into a `<details>`, in full. Brevity is for the surface, not for
+the truth. There used to be a whole page for it (`/evidence`, in the header as
+*Proof*); it is gone, and what it carried now lives in `docs/` — which is the
+honest place for a reviewer's document and the wrong place for a reader who came
+to pay somebody.
 
 ---
 
@@ -134,6 +143,14 @@ the surface, not for the truth.
 | `/app` dashboard | Who can be paid | A card's `$5 · $10 · $25`, or the **+** tile |
 | `/app/submit` | Say what you shipped, under one handle | **Publish my card** |
 | `/profile` Settings | Your handles, where they pay, your cards, the way out | Connect, or **Delete** |
+
+**The landing page is 65 words.** It was 279, in four stacked sections — a hero,
+three "which one are you" cards, three "how it works" cards, three columns of
+facts, and a closing button repeating the header's. Each section defended itself
+and together they buried the one sentence a stranger needs. What is left is: the
+heading (what it is), one line (why it is safe — and that line is the refund),
+three labels with no body text (what happens), one button. The accepted risk is
+folded into a disclosure rather than dropped.
 
 Settings is reachable from every screen — a sliders icon beside the account
 chip, not only a row inside a dropdown. Anything a person might want to change

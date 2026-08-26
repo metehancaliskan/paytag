@@ -17,7 +17,6 @@ import {
 } from "@/lib/identity";
 import { fetchGithubProfile, type GithubProfile } from "@/lib/github";
 import ProfilePanel from "@/components/ProfilePanel";
-import HandleSearch from "@/components/HandleSearch";
 import ShareLink from "@/components/ShareLink";
 import { PersonCardDetail, NoCardYet } from "@/components/PersonCard";
 import { getCard } from "@/lib/cards.server";
@@ -83,7 +82,14 @@ export default async function ProfilePage({ params }: Params) {
         ← Back to everyone
       </Link>
 
-      {/* Explicit grid placement rather than one sidebar column, so the order
+      {/* Nothing follows this grid. There used to be a "Pay someone else" field
+          under it, which is a strange thing to put at the bottom of one
+          person's page: the reader came here for THIS handle, and a search box
+          for a different one reads as "or maybe not them". Finding a handle
+          belongs where somebody is looking for one — the 404 page, which is
+          exactly where a mistyped handle lands.
+
+          Explicit grid placement rather than one sidebar column, so the order
           differs by width: on a phone the identity comes first (who am I
           paying?), then the escrow and the send form, and the supporting cards
           last. A single stacked sidebar would push the actual payment three
@@ -111,10 +117,6 @@ export default async function ProfilePage({ params }: Params) {
         </aside>
       </div>
 
-      <div className="card p-5">
-        <p className="mb-3 text-sm text-mute">Pay someone else</p>
-        <HandleSearch />
-      </div>
     </div>
   );
 }

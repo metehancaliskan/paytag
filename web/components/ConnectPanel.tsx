@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { useIdentity } from "./useIdentity";
 import { PROVIDERS } from "./providers";
-import Modal from "./Modal";
 import { CheckMark } from "./icons";
 import { describeAuthError } from "@/lib/auth-errors";
 import { kindUrlPrefix, slugOf } from "@/lib/identity";
@@ -22,6 +21,18 @@ import { X_ENABLED } from "@/lib/config";
  * Both providers are always listed. A person can hold one GitHub handle and one
  * X handle, each with its own escrow, and a row that only appears once you are
  * already verified cannot tell you the other one exists.
+ *
+ * ONE BUTTON PER ROW, always. When Connect comes back with "that handle has its
+ * own account", the same row's button becomes **Bring it here** and does the
+ * whole join. It used to be a second button below the list that opened a dialog
+ * with three bullet points of consequences — which is a lot of ceremony for
+ * somebody who pressed Connect and expected it to connect. The consequences are
+ * true and they are still stated, but one line under the row is the right size
+ * for them.
+ *
+ * There is still a click, and there has to be: the join removes one of the two
+ * logins and signs the reader out. Doing that as a silent consequence of Connect
+ * would be the wrong kind of smooth.
  */
 export default function ConnectPanel({
   authError,
@@ -32,8 +43,17 @@ export default function ConnectPanel({
   merged?: boolean;
 }) {
   const { identity, error, signIn } = useIdentity();
-  const [joining, setJoining] = useState<null | "asking" | "arming">(null);
+  const [joining, setJoining] = useState(false);
   const message = error ?? describeAuthError(authError);
+
+  /**
+   * The handle we just tried to add turned out to have its own account. Only
+   * these two codes mean that, and only then is a join the right offer — the
+   * rest are ordinary failures where Connect should stay Connect.
+   */
+  const taken =
+    authError === "link_identity_taken" ||
+    authError === "identity_on_another_account";
 
   /**
    * Arm the merge, then start the other account's sign-in.
@@ -44,7 +64,7 @@ export default function ConnectPanel({
    * (lib/merge-intent.ts).
    */
   async function join(provider: "github" | "x") {
-    setJoining("arming");
+    setJoining(true);
     try {
       const res = await fetch("/api/account/merge", { method: "POST" });
       if (!res.ok) throw new Error("could not arm");
@@ -53,7 +73,7 @@ export default function ConnectPanel({
       // other auth user, which is why there are two accounts in the first place.
       await signIn(provider, "/profile", true);
     } catch {
-      setJoining(null);
+      setJoining(false);
     }
   }
 
@@ -104,16 +124,29 @@ export default function ConnectPanel({
                   {/* The domain, not the brand name: the row then reads the
                       same shape before and after — `x.com` → `x.com/you`. */}
                   <span className="mono text-mute">{p.domain}</span>
-                  <button
-                    className="btn btn-ghost btn-sm ml-auto"
-                    onClick={() => void signIn(p.key, "/profile")}
-                    disabled={!usable}
-                    title={
-                      usable ? undefined : "Not enabled on this deployment yet"
-                    }
-                  >
-                    Connect
-                  </button>
+                  {/* The same slot, a different job, when Connect has already
+                      told us this handle is on its own account. */}
+                  {taken && mine ? (
+                    <button
+                      className="btn btn-primary btn-sm ml-auto"
+                      onClick={() => void join(p.key)}
+                      disabled={joining || !usable}
+                    >
+                      {joining && <span className="spinner" aria-hidden />}
+                      {joining ? "Opening…" : "Bring it here"}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-ghost btn-sm ml-auto"
+                      onClick={() => void signIn(p.key, "/profile")}
+                      disabled={!usable}
+                      title={
+                        usable ? undefined : "Not enabled on this deployment yet"
+                      }
+                    >
+                      Connect
+                    </button>
+                  )}
                 </>
               )}
             </li>
@@ -121,9 +154,15 @@ export default function ConnectPanel({
         })}
       </ul>
 
+      {/* Landing here signed OUT is the normal end of a merge, not a failure:
+          the session belonged to the account that was absorbed, and Supabase
+          cannot mint one for the account you kept. Saying "both handles are on
+          this account" beside two Connect buttons would read as a lie. */}
       {merged && (
         <p aria-live="polite" className="text-sm text-accent-text">
-          Joined. Both handles are on this account now.
+          {mine
+            ? "Joined. Both handles are on this account now."
+            : "Joined. Sign in with the handle you kept — both are on it now."}
         </p>
       )}
 
@@ -133,81 +172,21 @@ export default function ConnectPanel({
         </p>
       )}
 
-      {/* Two accounts, one person. It happens when a second handle was verified
-          before the two could be linked, and the way out cannot be automatic:
-          moving a handle between accounts takes proof from both sides. This is
-          the side the interface can ask for. */}
-      {mine && (
-        <>
-          <button
-            className="btn btn-quiet btn-sm"
-            onClick={() => setJoining("asking")}
-          >
-            My other handle is on a separate account
-          </button>
-
-          <Modal
-            open={joining !== null}
-            onClose={() => setJoining(null)}
-            labelledBy="join-title"
-          >
-            <div className="p-5">
-              <h2 id="join-title" className="font-bold">
-                Join that account into this one
-              </h2>
-              <p className="mt-1 text-sm text-mute">
-                Sign in as it. Its handle, card and payout address move here.
-              </p>
-            </div>
-
-            <ul className="divide-y divide-line border-t border-line text-sm">
-              <li className="p-5 text-dim">
-                Escrow is untouched — it belongs to the handle, not to the
-                account.
-              </li>
-              <li className="p-5 text-dim">
-                That account&rsquo;s login is removed. Supabase cannot merge two
-                logins, so afterwards you sign in here with{" "}
-                <span className="mono">
-                  {kindUrlPrefix(mine.kind)}
-                  {mine.handle}
-                </span>
-                .
-              </li>
-              <li className="p-5 text-dim">
-                If both accounts have a handle on the same platform, nothing
-                moves — there is only one slot per platform.
-              </li>
-            </ul>
-
-            <div className="flex flex-wrap items-center gap-2 border-t border-line p-5">
-              {PROVIDERS.filter((p) => (mine ? mine[p.key] === null : true)).map(
-                (p) => (
-                  <button
-                    key={p.key}
-                    className="btn btn-primary btn-sm"
-                    disabled={joining === "arming" || (p.key === "x" && !X_ENABLED)}
-                    onClick={() => void join(p.key)}
-                  >
-                    {joining === "arming" && (
-                      <span className="spinner" aria-hidden />
-                    )}
-                    {p.mark}
-                    Sign in as {p.label}
-                  </button>
-                ),
-              )}
-              <button
-                className="btn btn-quiet btn-sm ml-auto"
-                onClick={() => setJoining(null)}
-                disabled={joining === "arming"}
-              >
-                Cancel
-              </button>
-            </div>
-          </Modal>
-        </>
+      {/* What "Bring it here" will do, in one line, next to the button that
+          does it. Everything irreversible about it is in the second sentence. */}
+      {taken && mine && (
+        <p className="text-xs text-mute">
+          Its card and payout address come too, and the escrow is untouched — it
+          belongs to the handle. That account&rsquo;s login is removed, so
+          afterwards you sign in with{" "}
+          <span className="mono">
+            {kindUrlPrefix(mine.kind)}
+            {mine.handle}
+          </span>
+          .
+        </p>
       )}
+
     </div>
   );
 }

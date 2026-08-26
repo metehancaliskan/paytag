@@ -10,15 +10,13 @@ import { NETWORK } from "@/lib/config";
  * The product chrome. Everything behind "Open app" lives under this layout:
  * a header with the three places a signed-in person goes, and the account menu.
  *
- * Three links, not five. `Discover` is where money goes out, `Claim` is where
- * it comes in, `Proof` is the answer to "should I trust this" — and the two
- * personal pages (your card, your identity) hang off the account menu, where a
+ * Two links. `Discover` is where money goes out, `Claim` is where it comes in,
+ * and the personal pages (your card, your identity) hang off Settings, where a
  * reader already looks for their own things.
  */
 const NAV = [
   { href: "/app", label: "Discover" },
   { href: "/claim", label: "Claim" },
-  { href: "/evidence", label: "Proof" },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

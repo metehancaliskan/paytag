@@ -986,7 +986,7 @@ condition inside one layout:
 app/page.tsx        →  /            landing. Own header, one button: App →
 app/(app)/…         →  /app         the product. Header with nav + account menu
                        /app/submit  the card form
-                       /claim /connect /evidence /p/[kind]/[handle]
+                       /claim /pay/[handle] /p/[kind]/[handle] /profile
 ```
 
 A first visitor has no wallet to show and no account to manage, so the landing

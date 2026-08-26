@@ -31,10 +31,8 @@ const TABS: { slug: KindSlug; label: string; example: string }[] = [
  * it for them.
  */
 export default function HandleSearch({
-  big = false,
   showExamples = false,
 }: {
-  big?: boolean;
   showExamples?: boolean;
 }) {
   const router = useRouter();
@@ -128,7 +126,7 @@ export default function HandleSearch({
             {kind === null ? "…/" : kindUrlPrefix(kind)}
           </span>
           <input
-            className={`input-bare ${big ? "py-3.5 text-base" : ""}`}
+            className="input-bare"
             placeholder="username"
             value={raw}
             onBlur={() => setTouched(true)}
@@ -143,7 +141,7 @@ export default function HandleSearch({
         </div>
         <button
           type="submit"
-          className={`btn btn-primary ${big ? "btn-lg" : ""}`}
+          className="btn btn-primary"
           disabled={raw.trim() === "" || slug === null || pending}
         >
           {pending && <span className="spinner" aria-hidden />}

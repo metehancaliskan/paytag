@@ -7,10 +7,14 @@
    never a raw shade. That is what lets light and dark be a value swap instead
    of a second stylesheet, and it is why no component needs a `dark:` variant.
 
-   Resolution order, matching how the toggle works:
-     1. bare :root            → light values (the default when nothing is set)
-     2. prefers-color-scheme  → dark, unless the reader explicitly chose light
-     3. [data-theme]          → an explicit choice always wins, both ways
+   Resolution is the reader's operating system and nothing else:
+     1. bare :root            → light values
+     2. prefers-color-scheme  → dark
+
+   There is no in-app switch and no stored preference. A Light/Dark/Auto control
+   asked for a decision the reader had already made in their OS, and it was the
+   only reason the document needed an inline script and a `[data-theme]` layer
+   on every one of these blocks.
 --------------------------------------------------------------------------- */
 
 :root {
@@ -43,7 +47,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root {
     color-scheme: dark;
 
     --bg: #08090c;
@@ -68,32 +72,6 @@
 
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
   }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --bg: #08090c;
-  --surface: #0d0f14;
-  --raised: #14171f;
-  --line: #232936;
-  --line-strong: #39414f;
-  --text: #e7ebf5;
-  --dim: #a3accd;
-  --mute: #7b8598;
-
-  --accent: #22c37f;
-  --accent-hover: #4ade9b;
-  --accent-fg: #04150d;
-  --accent-text: #4ade9b;
-
-  --warn: #f0b429;
-  --warn-line: #6b5320;
-  --warn-bg: #1c170a;
-
-  --danger: #f2617a;
-
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
 }
 
 /* Expose the tokens to Tailwind so `bg-surface`, `text-mute`, `border-line`
@@ -183,12 +161,8 @@ body {
     padding: 0.375rem;
   }
 
-  :root[data-theme="dark"] .menu {
-    box-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 16px 40px -12px rgb(0 0 0 / 0.8);
-  }
-
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .menu {
+    .menu {
       box-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 16px 40px -12px rgb(0 0 0 / 0.8);
     }
   }
@@ -220,12 +194,8 @@ body {
     background: rgb(15 19 25 / 0.42);
   }
 
-  :root[data-theme="dark"] .modal {
-    box-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -16px rgb(0 0 0 / 0.85);
-  }
-
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .modal {
+    .modal {
       box-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 60px -16px rgb(0 0 0 / 0.85);
     }
   }
