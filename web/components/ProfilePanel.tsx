@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import SendForm from "./SendForm";
 import PaymentList from "./PaymentList";
-import CopyButton from "./CopyButton";
 import {
   latestLedger,
   listPaymentsForIdentity,
@@ -12,7 +11,7 @@ import {
   type Payment,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import { KIND, kindByteHex, slugOf, type IdentityKind } from "@/lib/identity";
+import { slugOf, type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits } from "@/lib/format";
 import { DEFAULT_TOKEN, tokenByContractId } from "@/lib/config";
 
@@ -180,34 +179,6 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
         failed={loadError !== null}
         onRefunded={refresh}
       />
-
-      {/* -------------------------------------------------- identity key */}
-      <details className="card p-5 text-sm text-mute">
-        <summary className="cursor-pointer font-medium text-dim">
-          What this identity looks like on chain
-        </summary>
-
-        <p className="mt-3 leading-relaxed">
-          The contract never sees &quot;{handle}&quot; — only{" "}
-          <span className="mono">
-            sha256({kindByteHex(kind)} ‖ &quot;{handle}&quot;)
-          </span>
-          . Capitals, an <span className="mono">@</span>, a full URL: all reduce
-          to these same bytes. The leading{" "}
-          <span className="mono">{kindByteHex(kind)}</span> is the identity kind,
-          so the same name on {kind === KIND.GithubUser ? "X" : "GitHub"} is a
-          different tag entirely.
-        </p>
-
-        <p className="mono mt-3 text-dim">{identityHex}</p>
-        <div className="mt-2">
-          <CopyButton
-            value={identityHex}
-            label="Copy identity key"
-            className="btn btn-ghost btn-sm"
-          />
-        </div>
-      </details>
     </div>
   );
 }
