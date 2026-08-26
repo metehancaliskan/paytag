@@ -27,8 +27,19 @@ export function isKindSlug(s: string): s is KindSlug {
   return s === "gh" || s === "x";
 }
 
+/**
+ * The URL slug for a kind — and it refuses the reserved kinds rather than
+ * answering "gh".
+ *
+ * A silent fallback here writes a GitHub URL for a non-GitHub identity, which
+ * is a live send form pointed at the wrong tag. `kindLabel` and `kindUrlPrefix`
+ * already answer "unknown" / "" for those kinds; this one used to be the odd
+ * function out.
+ */
 export function slugOf(kind: IdentityKind): KindSlug {
-  return kind === KIND.XUser ? "x" : "gh";
+  if (kind === KIND.XUser) return "x";
+  if (kind === KIND.GithubUser) return "gh";
+  throw new Error(`No URL slug for identity kind ${kindByteHex(kind)}.`);
 }
 
 type Rule = {
@@ -99,10 +110,7 @@ export function profileUrl(kind: IdentityKind, handle: string): string {
  * It rejects invalid input rather than repairing it: guessing at an ambiguous
  * handle means sending money to somebody else's tag (SPEC §2.2).
  */
-export function normalizeHandle(
-  raw: string,
-  kind: IdentityKind = KIND.GithubUser,
-): string {
+export function normalizeHandle(raw: string, kind: IdentityKind): string {
   const rule = RULES[kind];
   if (!rule) throw new Error(`Unsupported identity kind: ${kind}`);
   if (typeof raw !== "string") throw new Error("A handle must be a string.");
@@ -153,10 +161,17 @@ function asciiLower(s: string): string {
   return out;
 }
 
-/** identity_key = sha256(kind_byte ‖ utf8(normalized_handle)) */
+/**
+ * identity_key = sha256(kind_byte ‖ utf8(normalized_handle))
+ *
+ * `kind` is required, deliberately. It used to default to GitHub, which turned
+ * a forgotten argument into a wrong tag — money bound to a key nobody is
+ * looking at — instead of into a compile error. The two legacy wrappers above
+ * exist for the cases that really do mean GitHub.
+ */
 export async function identityKey(
   handle: string,
-  kind: IdentityKind = KIND.GithubUser,
+  kind: IdentityKind,
 ): Promise<Uint8Array> {
   const norm = normalizeHandle(handle, kind);
   const body = new TextEncoder().encode(norm);

@@ -6,7 +6,7 @@ import { useWallet } from "./WalletProvider";
 import { usePayout } from "./usePayout";
 import CopyButton from "./CopyButton";
 import { GithubMark, XMark } from "./icons";
-import { KIND } from "@/lib/identity";
+import { KIND, kindUrlPrefix } from "@/lib/identity";
 import { shortAddr } from "@/lib/format";
 import { describePayoutProblem, normalizePayout } from "@/lib/payout";
 import { describeWriteError } from "@/lib/db-errors";
@@ -149,6 +149,22 @@ export default function PayoutPanel({ empty }: { empty: string }) {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Which escrow this address governs, in words, every time. The control
+          above only appears with two identities, and index 0 is always GitHub
+          (usePayout sorts by kind) — so somebody who came to set the wallet for
+          their X escrow landed on the GitHub row with nothing but a segmented
+          control to notice. A saved address is a hard lock at claim time; it may
+          not be a thing you set by accident. */}
+      {row !== null && (
+        <p className="mt-3 text-xs text-mute first:mt-0">
+          For{" "}
+          <span className="mono text-dim">
+            {kindUrlPrefix(row.kind)}
+            {row.handle}
+          </span>
+        </p>
       )}
 
       {failed ? (

@@ -15,13 +15,21 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
-        // /p/torvalds links left over from the single-identity era.
-        // Permanent, so old links keep working and search engines settle on
-        // one canonical address.
+        // A one-segment link says a name and not a platform. It used to become
+        // /p/gh/:handle — see the note below — and now it becomes a page that
+        // asks. Not permanent: this is a fork in the road, not a canonical
+        // address, and the two real pages are the canonical ones.
         source: "/p/:handle",
-        destination: "/p/gh/:handle",
-        permanent: true,
+        destination: "/pay/:handle",
+        permanent: false,
       },
+      // /p/:handle is no longer redirected to a GUESS. It used to become /p/gh/:handle,
+      // which invented an identity kind: a legacy or truncated link meaning
+      // x.com/<name> produced a working send form for github.com/<name> — a
+      // different person's tag, with nothing on screen to say so. The route now
+      // renders a two-option page instead (app/(app)/p/[handle]/page.tsx), and
+      // the reader picks. A redirect that guesses which stranger to pay is worse
+      // than no redirect at all.
       // The landing page took over "/", so the directory and the form moved
       // behind /app. These two paths were shared while they existed.
       { source: "/people", destination: "/app", permanent: true },

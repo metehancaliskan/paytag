@@ -22,6 +22,11 @@ import ShareLink from "@/components/ShareLink";
 import { PersonCardDetail, NoCardYet } from "@/components/PersonCard";
 import { getCard } from "@/lib/cards.server";
 
+// Same reason as the directory: this page's freshness must not depend on
+// whether an env var happened to be present at build time. A person's page
+// showing "no card yet" forever, cached, is the worst version of that.
+export const dynamic = "force-dynamic";
+
 type Params = { params: Promise<{ kind: string; handle: string }> };
 
 type Resolved = { slug: KindSlug; kind: IdentityKind; handle: string };

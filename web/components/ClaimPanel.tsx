@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import { useIdentity, identityList } from "./useIdentity";
 import { usePayout } from "./usePayout";
 import { PROVIDERS } from "./providers";
-import CopyButton from "./CopyButton";
+import ClaimedDialog, { type Claimed } from "./ClaimedDialog";
 import { describeAuthError } from "@/lib/auth-errors";
 import {
   buildClaim,
@@ -21,12 +22,7 @@ import { sign, networkMismatch } from "@/lib/freighter";
 import { fromHex, kindUrlPrefix, type IdentityKind } from "@/lib/identity";
 import { claimDestination } from "@/lib/payout";
 import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
-import {
-  DEFAULT_TOKEN,
-  X_ENABLED,
-  explorerTx,
-  tokenByContractId,
-} from "@/lib/config";
+import { DEFAULT_TOKEN, X_ENABLED, tokenByContractId } from "@/lib/config";
 
 /**
  * Claiming, as a list rather than a wizard.
@@ -66,6 +62,7 @@ export default function ClaimPanel({
   hintKind?: IdentityKind | null;
   authError?: string;
 }) {
+  const router = useRouter();
   const { address, connect, connecting, installed } = useWallet();
   const { identity, error: signInError, signIn, signOut } = useIdentity();
   const { savedFor } = usePayout();
@@ -73,15 +70,20 @@ export default function ClaimPanel({
   const mine = identityList(identity);
   const [escrows, setEscrows] = useState<Record<string, Escrow> | null>(null);
   const [ledger, setLedger] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Errors are per identity. A single message under the list said "the verifier
+  // refused to sign" without saying which handle it refused for — on a page
+  // whose whole job is that the two are separate, that is the wrong shape.
+  // `hex: null` is a failure of the page itself, not of a row.
+  const [error, setError] = useState<{ hex: string | null; text: string } | null>(
+    null,
+  );
 
   /** Which identity a claim is running for, and how far along it is. */
   const [busy, setBusy] = useState<{ hex: string; step: string } | null>(null);
-  const [claimed, setClaimed] = useState<{
-    hash: string;
-    units: bigint;
-    to: string;
-  } | null>(null);
+  const [claimed, setClaimed] = useState<Claimed | null>(null);
+  // Bumped when a claim finishes: the payments it took are Claimed now, so the
+  // row would otherwise keep offering money that has already moved.
+  const [tick, setTick] = useState(0);
 
   // Every identity at once. Reading them one at a time would be the same
   // mistake the segmented control was: the page's job is the comparison.
@@ -118,14 +120,14 @@ export default function ClaimPanel({
         setEscrows(next);
         setError(null);
       } catch (e) {
-        if (alive) setError(describeEscrowError(e));
+        if (alive) setError({ hex: null, text: describeEscrowError(e) });
       }
     })();
 
     return () => {
       alive = false;
     };
-  }, [keys]);
+  }, [keys, tick]);
 
   async function claim(hex: string, handle: string, kind: IdentityKind) {
     const escrow = escrows?.[hex];
@@ -177,52 +179,16 @@ export default function ClaimPanel({
 
       setBusy({ hex, step: "Submitting…" });
       const out = await submitSigned(signed);
-      setClaimed({ hash: out.hash, units: escrow.total, to });
+      setClaimed({ hash: out.hash, units: escrow.total, to, kind, handle });
+      // The person's own page shows what is waiting in escrow, server-rendered.
+      // Without this, going back to it after a claim shows the money still
+      // sitting there.
+      router.refresh();
     } catch (e) {
-      setError(describeEscrowError(e));
+      setError({ hex, text: describeEscrowError(e) });
     } finally {
       setBusy(null);
     }
-  }
-
-  // ------------------------------------------------------------------- done
-
-  if (claimed) {
-    return (
-      <div className="card p-6">
-        <span className="badge badge-claimed">claimed</span>
-        <h2 className="mt-3 text-xl font-semibold">
-          <span
-            className="num"
-            title={`${fromUnits(claimed.units)} ${DEFAULT_TOKEN.symbol}`}
-          >
-            {displayUnits(claimed.units)}
-          </span>{" "}
-          {DEFAULT_TOKEN.symbol} → <span className="mono">{shortAddr(claimed.to)}</span>
-        </h2>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <a
-            className="btn btn-ghost btn-sm"
-            href={explorerTx(claimed.hash)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View the transaction
-          </a>
-          <CopyButton
-            value={claimed.hash}
-            label="Copy hash"
-            className="btn btn-quiet btn-sm"
-          />
-          <button
-            className="btn btn-quiet btn-sm"
-            onClick={() => setClaimed(null)}
-          >
-            Back
-          </button>
-        </div>
-      </div>
-    );
   }
 
   // ------------------------------------------------------------ not signed in
@@ -249,10 +215,18 @@ export default function ClaimPanel({
           <p className="text-sm text-mute">
             Money is waiting for{" "}
             <span className="font-semibold text-text">
-              {kindUrlPrefix(hintKind ?? PROVIDERS[0].kind)}
+              {/* No default. A link that arrived without `on=` does not say
+                  which platform, and printing "github.com/" over an X handle
+                  sends the claimant to verify the wrong account — the exact
+                  guess this component's own prop doc warns about. */}
+              {hintKind !== null && hintKind !== undefined
+                ? kindUrlPrefix(hintKind)
+                : "@"}
               {hintHandle}
             </span>
-            . Sign in as that account.
+            {hintKind !== null && hintKind !== undefined
+              ? ". Sign in as that account."
+              : " — on GitHub or on X. Verify whichever one is yours."}
           </p>
         )}
 
@@ -299,6 +273,9 @@ export default function ClaimPanel({
         {mine.map((v) => {
           const escrow = escrows?.[v.identityHex];
           const locked = savedFor(v.kind);
+          // Per identity, always: the locked address if there is one, otherwise
+          // the wallet connected right now.
+          const destination = claimDestination(locked, address).address;
           const running = busy?.hex === v.identityHex;
           const soonest = escrow?.claimable.reduce(
             (min, p) => (min === null || p.expiryLedger < min ? p.expiryLedger : min),
@@ -323,19 +300,32 @@ export default function ClaimPanel({
                   </span>
                 </span>
 
-                {/* Only what the row does not already say. A locked payout is
-                    worth a line; the connected wallet is said once, below. */}
+                {/* Where THIS handle's money goes, on the row itself. It was a
+                    single line under the list, which read as one destination
+                    for both — and the two can pay two different wallets. */}
                 {escrow && escrow.total > 0n && (
                   <span className="mt-0.5 block pl-6 text-xs text-mute">
                     {soonest !== null && soonest !== undefined && ledger !== null && (
-                      <>{ledgersToHuman(soonest - ledger)} left</>
+                      <>{ledgersToHuman(soonest - ledger)} left · </>
                     )}
-                    {locked && (
+                    {destination ? (
                       <>
-                        {" · pays "}
-                        <span className="mono">{shortAddr(locked)}</span>
+                        pays <span className="mono">{shortAddr(destination)}</span>
+                        {locked && " (locked)"}
                       </>
+                    ) : (
+                      "connect a wallet to claim it"
                     )}
+                  </span>
+                )}
+
+                {/* The failure sits with the handle it happened to. */}
+                {error?.hex === v.identityHex && (
+                  <span
+                    role="alert"
+                    className="mt-1 block pl-6 text-xs text-danger"
+                  >
+                    {error.text}
                   </span>
                 )}
               </span>
@@ -420,14 +410,11 @@ export default function ClaimPanel({
             {connecting ? "Connecting…" : "Connect a wallet"}
           </button>
         ) : (
-          <>
-            <span>
-              Pays <span className="mono">{shortAddr(address)}</span>
-            </span>
-            <Link className="link" href="/profile">
-              Lock an address
-            </Link>
-          </>
+          // No address here any more: each row states its own, because a locked
+          // payout on one handle says nothing about the other.
+          <Link className="link" href="/profile">
+            Lock an address
+          </Link>
         )}
 
         <button
@@ -442,11 +429,22 @@ export default function ClaimPanel({
         <p className="text-sm text-mute">Nothing waiting right now.</p>
       )}
 
-      {(error ?? message) && (
+      {/* Only what belongs to no row: a failed chain read, a sign-in message. */}
+      {((error && error.hex === null) || message) && (
         <p role="alert" className="text-sm text-danger">
-          {error ?? message}
+          {error?.hex === null ? error.text : message}
         </p>
       )}
+
+      {/* The result of a claim, over the list rather than instead of it — the
+          other handle's escrow is still worth seeing at that moment. */}
+      <ClaimedDialog
+        claimed={claimed}
+        onClose={() => {
+          setClaimed(null);
+          setTick((n) => n + 1);
+        }}
+      />
     </div>
   );
 }

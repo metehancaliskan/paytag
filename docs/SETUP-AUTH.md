@@ -253,10 +253,49 @@ instead of ours". It is off by default, and it is the kind of thing that belongs
 in a deployment note rather than in a silent fallback: a verification that
 quietly degrades when a payment fails is worse than one that stops.
 
-**e. What you get.** A person can verify one GitHub handle and one X handle on
+**e. Turn on Manual Linking. This is not optional.** Supabase → Authentication
+→ **Advanced** (Sign In / Providers page) → **Manual linking** → on.
+
+Without it, a person who has verified GitHub and then presses **Verify** on the
+X row does not get a second identity — they get a second *account*. Supabase
+attaches a new provider to an existing user only when the provider returns a
+verified email that matches the one on file, and X's `users.read` scope returns
+no email at all. So the sign-in creates a fresh user with none of their
+identities: their GitHub verification looks forgotten, and the app asks them to
+verify GitHub again. It is the most confusing failure in the product, and it is
+one dashboard switch.
+
+With it on, `useIdentity.signIn` calls `linkIdentity()` whenever a session
+already exists, and the second handle lands on the same account. The callback
+carries `&link=1` and checks the result: if the exchanged session belongs to a
+user with no identities, the link did not happen — nothing is written, the stray
+session is dropped, and the reader is told to sign in again with the handle they
+had. Their real identity row is never touched, so nothing is lost either way.
+
+**e2. If you are already in the two-account state.** Anyone who pressed Verify
+before Manual Linking was on may have two Paytag accounts: one holding the
+GitHub handle, one holding the X handle. Supabase will refuse to link either
+into the other, because each provider account is attached to its own auth user —
+so the app now says so instead of silently doing nothing (`link_identity_taken`).
+The way out is one button, and it does not need Manual Linking at all:
+
+1. Sign in as the account you want to **keep**.
+2. Settings → Accounts → **My other handle is on a separate account**.
+3. Sign in as the other one when it asks.
+
+The other account's handle, card and payout address move onto the account you
+kept, and that account's login is removed — Supabase cannot merge two logins, so
+one has to go. Sign in once more with the handle you kept and both are there.
+Nothing moves if both accounts hold a handle on the same platform; there is one
+slot per platform, so delete the one you do not want first.
+
+Escrow is untouched by any of this — it belongs to the handle, not to the
+account (`docs/SPEC.md` §9.2).
+
+**f. What you get.** A person can verify one GitHub handle and one X handle on
 the same Paytag account. They are separate identities with separate escrows and
 separate cards — `identities` allows one row per kind per profile, and the claim
-flow asks which one you are withdrawing. Nothing merges.
+page lists them as separate rows with separate payout addresses. Nothing merges.
 
 ---
 

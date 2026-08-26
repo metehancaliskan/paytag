@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
 import { identityList, useIdentity } from "./useIdentity";
-import { KIND, type IdentityKind } from "@/lib/identity";
+import { type IdentityKind } from "@/lib/identity";
 import { isPayoutAddress } from "@/lib/payout";
 
 /**
@@ -18,6 +18,10 @@ import { isPayoutAddress } from "@/lib/payout";
  * `payout_prefs` is readable only by its owner (RLS), so this returns rows for
  * the signed-in reader and nothing else. An empty address is not a missing
  * setting: it means "pay whatever wallet is connected", which is the default.
+ *
+ * The identities come from `useIdentity`, which fetched them once for the whole
+ * page. This used to re-read `identities` (and the session) itself, which is two
+ * requests for an answer already on screen — and two answers that could differ.
  */
 export type PayoutRow = {
   identityId: string;
@@ -33,8 +37,10 @@ export function usePayout() {
 
   const mine = identityList(identity);
   // A stable key for the identities we are looking up: `mine` is a fresh array
-  // on every render, and using it as a dependency would re-query forever.
-  const signature = mine.map((v) => `${v.kind}:${v.handle}`).join(",");
+  // on every render, and using it as a dependency would re-query forever. The
+  // ids, not the names — the writes are all by id, and a re-verified handle
+  // keeps its name and changes its id.
+  const signature = mine.map((v) => v.id).join(",");
 
   const [rows, setRows] = useState<PayoutRow[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -55,19 +61,11 @@ export function usePayout() {
           return;
         }
 
-        const { data: auth } = await supabase.auth.getUser();
-        if (!auth.user) throw new Error("no session");
-
-        // One pass for both identities: a screen that shows them side by side
-        // would otherwise flicker on every switch.
-        const [ids, prefs] = await Promise.all([
-          supabase
-            .from("identities")
-            .select("id, kind, handle")
-            .eq("profile_id", auth.user.id),
-          supabase.from("payout_prefs").select("identity_id, address"),
-        ]);
-        if (ids.error) throw ids.error;
+        // One request, for the one thing this hook actually owns.
+        const prefs = await supabase
+          .from("payout_prefs")
+          .select("identity_id, address");
+        if (prefs.error) throw prefs.error;
         if (!alive) return;
 
         const address = new Map(
@@ -77,25 +75,18 @@ export function usePayout() {
           }),
         );
 
-        const next: PayoutRow[] = [];
-        for (const r of ids.data ?? []) {
-          const row = r as { id?: unknown; kind?: unknown; handle?: unknown };
-          const kind: IdentityKind | null =
-            row.kind === KIND.GithubUser || row.kind === KIND.XUser
-              ? row.kind
-              : null;
-          if (typeof row.id !== "string" || kind === null) continue;
-          const saved = address.get(row.id);
-          next.push({
-            identityId: row.id,
-            kind,
-            handle: typeof row.handle === "string" ? row.handle : "",
+        const next: PayoutRow[] = mine.map((v) => {
+          const saved = address.get(v.id);
+          return {
+            identityId: v.id,
+            kind: v.kind,
+            handle: v.handle,
             // A row that fails validation counts as absent rather than shown:
             // an address we would refuse to sign for must not be displayed as
             // the one that will be paid.
             saved: isPayoutAddress(saved) ? saved : null,
-          });
-        }
+          };
+        });
         next.sort((a, b) => a.kind - b.kind);
         setRows(next);
       } catch {
@@ -106,6 +97,9 @@ export function usePayout() {
     return () => {
       alive = false;
     };
+    // `mine` is deliberately not a dependency: it is a fresh array on every
+    // render, and `signature` is the value of it that can actually change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, signature, identity.status]);
 
   /** Reflect a write locally, so a save does not need a round trip to show. */

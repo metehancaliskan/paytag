@@ -6,7 +6,7 @@ import { browserSupabase } from "@/lib/supabase/client";
 import { useIdentity, identityList } from "./useIdentity";
 import { GithubMark, XMark } from "./icons";
 import { parseLink, type PersonCard } from "@/lib/cards";
-import { isRoleKey } from "@/lib/roles";
+import { roleForKind } from "@/lib/roles";
 import { KIND, kindUrlPrefix, slugOf } from "@/lib/identity";
 
 type Mine = { card: PersonCard; published: boolean };
@@ -31,9 +31,11 @@ export default function MyCards({ empty }: { empty: string }) {
   const mine = identityList(identity);
   const [rows, setRows] = useState<Mine[] | null>(null);
 
-  // A stable key, so the effect re-runs when the identity set actually changes
-  // rather than on every render that produces a new array.
-  const key = mine.map((v) => `${v.kind}:${v.handle}`).join(",");
+  // Keyed on the ROW IDS, not on kind:handle. Every write this feeds uses
+  // `v.id`; a handle deleted and re-verified keeps the same kind:handle and gets
+  // a new id, so a key built from the name would leave the dead id in place and
+  // every upsert would be refused by row level security.
+  const key = mine.map((v) => v.id).join(",");
 
   useEffect(() => {
     if (!supabase || mine.length === 0) return;
@@ -41,24 +43,16 @@ export default function MyCards({ empty }: { empty: string }) {
 
     void (async () => {
       try {
-        const { data: auth } = await supabase.auth.getUser();
-        if (!auth.user) return;
-
-        const { data: ids } = await supabase
-          .from("identities")
-          .select("id, kind, handle")
-          .eq("profile_id", auth.user.id);
-        if (!ids?.length) {
-          if (alive) setRows([]);
-          return;
-        }
-
+        // The identities are already in hand — `useIdentity` fetched them once
+        // for the page, row ids included. This used to ask for the session and
+        // the identity rows again, which is two requests for an answer that was
+        // on screen before this component mounted.
         const { data: cards } = await supabase
           .from("cards")
-          .select("identity_id, role, headline, summary, ecosystems, links, published")
+          .select("identity_id, headline, summary, ecosystems, links, published")
           .in(
             "identity_id",
-            ids.map((i) => (i as { id: string }).id),
+            mine.map((v) => v.id),
           );
 
         if (!alive) return;
@@ -66,12 +60,7 @@ export default function MyCards({ empty }: { empty: string }) {
         const out: Mine[] = [];
         for (const row of cards ?? []) {
           const c = row as Record<string, unknown>;
-          const owner = ids.find(
-            (i) => (i as { id: string }).id === c.identity_id,
-          ) as { kind: number; handle: string } | undefined;
-          const match = mine.find(
-            (v) => v.kind === owner?.kind && v.handle === owner?.handle,
-          );
+          const match = mine.find((v) => v.id === c.identity_id);
           if (!match) continue;
 
           out.push({
@@ -81,7 +70,9 @@ export default function MyCards({ empty }: { empty: string }) {
               handle: match.handle,
               identityKey: match.identityHex,
               displayName: null,
-              role: isRoleKey(c.role) ? c.role : null,
+              // Derived from the platform (lib/roles.ts), like every other
+              // place a role is shown.
+              role: roleForKind(match.kind),
               headline: typeof c.headline === "string" ? c.headline : null,
               summary: typeof c.summary === "string" ? c.summary : null,
               ecosystems: Array.isArray(c.ecosystems)

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
 import { useIdentity, identityList } from "./useIdentity";
@@ -73,6 +74,7 @@ export default function CardEditor({
   authError?: string;
 }) {
   const supabase = useMemo(() => browserSupabase(), []);
+  const router = useRouter();
   const { identity, error: authProblem, signIn } = useIdentity();
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -118,27 +120,32 @@ export default function CardEditor({
   // Load the identity row and any card already on it. Both reads are ordinary
   // authenticated reads: `identities` is world readable, and RLS on `cards`
   // shows an unpublished card to its owner only.
+  const identityId = chosen?.id ?? null;
+  const profileId = identity.status === "verified" ? identity.profileId : null;
+
+  // The card that is loaded, versus the card the tiles now say we are editing.
+  //
+  // This gap is where the worst bug in the form lived. `loaded` is replaced only
+  // after the `cards` read for the newly picked identity comes back; until then
+  // the form still holds the OTHER handle's text and `loaded.identityId` still
+  // points at the OTHER row — so pressing Save in that window wrote the X card's
+  // text over the GitHub card, said "your card is live", and linked to an X page
+  // that showed "no card yet". Nothing about the screen suggested a wrong row
+  // was about to be written.
+  const stale = loaded?.identityId !== identityId;
+
   useEffect(() => {
-    if (!supabase || !handle) return;
+    if (!supabase || !identityId || !profileId) return;
     let alive = true;
 
     void (async () => {
       try {
-        const { data: auth } = await supabase.auth.getUser();
-        if (!auth.user) throw new Error("no session");
-
-        const { data: id, error: idError } = await supabase
-          .from("identities")
-          .select("id")
-          .eq("profile_id", auth.user.id)
-          .eq("kind", kind)
-          .maybeSingle();
-        if (idError || !id?.id) throw idError ?? new Error("no identity");
-
+        // No session read and no identities query: both came from the one fetch
+        // `IdentityProvider` made for the page.
         const { data: card } = await supabase
           .from("cards")
           .select("headline, summary, ecosystems, links, published")
-          .eq("identity_id", id.id)
+          .eq("identity_id", identityId)
           .maybeSingle();
 
         if (!alive) return;
@@ -159,11 +166,7 @@ export default function CardEditor({
             }
           : null;
 
-        setLoaded({
-          identityId: id.id as string,
-          profileId: auth.user.id,
-          existing,
-        });
+        setLoaded({ identityId, profileId, existing });
 
         // Also resets when there is no card for this identity: switching from a
         // filled GitHub card to an empty X one must not leave the old text in
@@ -184,7 +187,7 @@ export default function CardEditor({
     return () => {
       alive = false;
     };
-  }, [supabase, handle, kind]);
+  }, [supabase, identityId, profileId]);
 
   const toggleEcosystem = useCallback((name: string) => {
     setEcosystems((current) =>
@@ -233,8 +236,9 @@ export default function CardEditor({
   async function save() {
     // `chosen` in the guard as well as `loaded`: the form only renders for a
     // verified platform, and the write must be impossible without one even if
-    // some future render forgets that.
-    if (!supabase || !loaded || !chosen || problem) return;
+    // some future render forgets that. `stale` is the one that stops a write
+    // going to the identity we were editing a moment ago.
+    if (!supabase || !loaded || !chosen || stale || problem) return;
     setError(null);
     setBusy(true);
     try {
@@ -252,8 +256,30 @@ export default function CardEditor({
         { onConflict: "identity_id" },
       );
       if (e) throw new Error(e.message);
+
+      // The row exists now. Without this the button still offered "Publish my
+      // card" for the rest of the session, as though the save had not happened.
+      setLoaded((l) =>
+        l === null
+          ? l
+          : {
+              ...l,
+              existing: {
+                headline: headline.trim(),
+                summary: summary.trim(),
+                ecosystems,
+                links: cleanLinks.map((l) => l.url),
+                published,
+              },
+            },
+      );
       setSaved(true);
       setEverSaved(true);
+      // The directory and the person's own page are server-rendered. Without
+      // this, a Back to /app after publishing serves the render from before the
+      // card existed — Next bypasses staleness checks entirely on back/forward,
+      // so it never self-heals.
+      router.refresh();
     } catch (e) {
       setError(describeWriteError(e));
     } finally {
@@ -547,15 +573,17 @@ export default function CardEditor({
             <button
               className="btn btn-primary btn-lg"
               onClick={save}
-              disabled={busy || problem !== null}
+              disabled={busy || stale || problem !== null}
               aria-describedby={problem ? "publish-blocked" : undefined}
             >
-              {busy && <span className="spinner" aria-hidden />}
+              {(busy || stale) && <span className="spinner" aria-hidden />}
               {busy
                 ? "Saving…"
-                : loaded?.existing
-                  ? "Save changes"
-                  : "Publish my card"}
+                : stale
+                  ? "Loading…"
+                  : loaded?.existing
+                    ? "Save changes"
+                    : "Publish my card"}
             </button>
             {/* The reason the button is dead, in the colour of a caution rather
                 than of a caption. In mute grey beside a faded button it read as

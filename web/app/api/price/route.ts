@@ -4,6 +4,11 @@ import { PRICE_TTL_SECONDS } from "@/lib/config";
 export const runtime = "nodejs";
 // Next caches the response for this long, so a page full of components asking
 // for the rate costs one upstream request per minute, not one per render.
+// The handler itself reads no dynamic API, so without this the GET is
+// prerendered at build and the first minute of traffic after a deploy gets the
+// build-time rate. The inner fetch does the real caching.
+export const dynamic = "force-dynamic";
+
 export const revalidate = 60;
 
 /**

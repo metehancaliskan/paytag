@@ -29,9 +29,9 @@ export const metadata: Metadata = {
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ auth_error?: string }>;
+  searchParams: Promise<{ auth_error?: string; merged?: string }>;
 }) {
-  const { auth_error: authError } = await searchParams;
+  const { auth_error: authError, merged } = await searchParams;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -45,7 +45,7 @@ export default async function SettingsPage({
           title="Accounts"
           hint="A provider confirms the handle is yours. One of each, at most."
         >
-          <ConnectPanel authError={authError} />
+          <ConnectPanel authError={authError} merged={merged === "1"} />
         </Section>
 
         <Section

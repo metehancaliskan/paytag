@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { browserSupabase } from "@/lib/supabase/client";
 import { useIdentity, identityList } from "./useIdentity";
+import { kindUrlPrefix } from "@/lib/identity";
 
 /**
  * Deleting the account.
@@ -34,14 +35,21 @@ export default function DeleteAccount({ empty }: { empty: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Nothing to delete until something is verified: an anonymous visitor has no
-  // account, and a signed-in one with no identity has nothing this could take.
-  // Said in a line rather than rendered as a gap.
-  if (identity.status !== "verified" || mine.length === 0) {
+  // A signed-in account with no verified handle is a real account — the OAuth
+  // callback writes the profile before the identity, so a verification that
+  // failed halfway leaves one. It used to be undeletable: this panel asked for
+  // a handle to type and there was none, so it rendered the empty line and the
+  // person was stuck with an account they could not remove. The API already
+  // accepts the word "delete" for exactly this case.
+  const orphan = identity.status === "anon" && identity.signedIn;
+
+  if (!orphan && (identity.status !== "verified" || mine.length === 0)) {
     return <p className="text-sm text-mute">{empty}</p>;
   }
 
-  const target = mine[0].handle;
+  // Every verified handle, not just the first. With two of them, being asked to
+  // type "one of your handles" and shown only one is a riddle.
+  const target = orphan ? "delete" : mine[0].handle;
   const ready = typed.trim().replace(/^@/, "").toLowerCase() === target;
 
   async function remove() {
@@ -84,27 +92,47 @@ export default function DeleteAccount({ empty }: { empty: string }) {
   return (
     <section className="card border-danger/40 p-5">
       <ul className="space-y-1.5 text-sm text-dim">
-        <li>
-          <span className="font-semibold text-text">@{target}</span> is released
-          — anyone can verify it after you.
-        </li>
-        <li>Your cards, both of them if you have two, are gone for good.</li>
-        <li>
-          Escrow is untouched. It belongs to the handle, so verifying{" "}
-          <span className="font-semibold text-text">@{target}</span> again makes
-          it claimable again.
-        </li>
+        {orphan ? (
+          <li>
+            This account has no verified handle, so there is nothing to release
+            and no card to lose.
+          </li>
+        ) : (
+          <>
+            <li>
+              {/* Both handles, named. With two verified and only one shown, the
+                  list reads as though the other one survives. */}
+              {mine.map((v, i) => (
+                <span key={v.id}>
+                  {i > 0 && " and "}
+                  <span className="font-semibold text-text">
+                    {kindUrlPrefix(v.kind)}
+                    {v.handle}
+                  </span>
+                </span>
+              ))}{" "}
+              {mine.length > 1 ? "are" : "is"} released — anyone can verify{" "}
+              {mine.length > 1 ? "them" : "it"} after you.
+            </li>
+            <li>Your cards, both of them if you have two, are gone for good.</li>
+            <li>
+              Escrow is untouched. It belongs to the handle, so verifying again
+              makes it claimable again.
+            </li>
+          </>
+        )}
       </ul>
 
       <label className="mt-4 block">
         <span className="text-xs text-mute">
-          Type <span className="mono">@{target}</span> to confirm
+          Type <span className="mono">{orphan ? target : `@${target}`}</span> to
+          confirm
         </span>
         <input
           className="field mono mt-1"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          placeholder={`@${target}`}
+          placeholder={orphan ? target : `@${target}`}
           spellCheck={false}
           autoComplete="off"
         />

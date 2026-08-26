@@ -6,6 +6,13 @@ import { listCards, countCards } from "@/lib/cards.server";
 import { ROLES, isRoleKey, kindForRole, roleForKind } from "@/lib/roles";
 import { KIND, type IdentityKind } from "@/lib/identity";
 
+// Read per request, always. Both of the Supabase reads below go through
+// `serverSupabase()`, which returns null WITHOUT touching cookies() when the
+// deployment has no Supabase env — and cookies() was the only thing making this
+// page dynamic. On a build where those vars are runtime-only, the directory was
+// prerendered empty and served from the full route cache to everyone.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Discover — Paytag",
   description:

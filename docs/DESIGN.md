@@ -172,6 +172,29 @@ follow — put the offer where the eye already is, not in a banner above it.
 
 ---
 
+## Money paths have no defaults
+
+A control that decides **where money goes** does not get a default value, and it
+does not get a value guessed from the one thing the reader typed.
+
+The rule came from three of them, all in the same shape:
+
+- The "pay someone else" field opened on GitHub. A bare `elonmusk` is a valid
+  username on both platforms, so nothing rejected it — a donor who meant X and
+  did not notice the tab paid a stranger with the same name. It now starts on
+  neither, and a pasted `github.com/…` or `x.com/…` link picks for them.
+- `/p/<name>`, a link with no platform, was redirected to `/p/gh/<name>`. It now
+  goes to `/pay/<name>`, which shows both spelled out and picks neither.
+- The payout section opened on whichever identity sorted first and named it only
+  in a screen-reader label. It names the handle in words now, every time, because
+  a saved payout address is a hard lock at claim time.
+
+The general form: if the reader has not said which of two things they mean, and
+the two things are different people's money, the interface asks. Choosing for
+them is not convenience, it is a wrong answer delivered confidently.
+
+---
+
 ## Destructive things
 
 `/profile` reads top to bottom in the order of dependency — identities, payout

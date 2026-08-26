@@ -16,6 +16,20 @@ const TABS: { slug: KindSlug; label: string; example: string }[] = [
   { slug: "x", label: "X", example: "elonmusk" },
 ];
 
+/**
+ * Find a handle to pay.
+ *
+ * THE PLATFORM HAS NO DEFAULT, and that is the whole point of this component.
+ * It used to start on GitHub. A bare username like `elonmusk` is valid under
+ * both rulesets, so nothing rejected it — a donor who meant the X account and
+ * did not notice the tab was sent to /p/gh/elonmusk and their money bound to
+ * sha256(0x00 ‖ "elonmusk"), collectable by whoever holds that name on GitHub.
+ * The tab was the load-bearing input on a money path and it looked like a
+ * filter.
+ *
+ * So: nothing is selected until somebody selects it, and a pasted URL selects
+ * it for them.
+ */
 export default function HandleSearch({
   big = false,
   showExamples = false,
@@ -24,7 +38,7 @@ export default function HandleSearch({
   showExamples?: boolean;
 }) {
   const router = useRouter();
-  const [slug, setSlug] = useState<KindSlug>("gh");
+  const [slug, setSlug] = useState<KindSlug | null>(null);
   const [raw, setRaw] = useState("");
   // Errors stay quiet until the field has been left or submitted once.
   // Validating every keystroke from the first character means telling someone
@@ -32,15 +46,29 @@ export default function HandleSearch({
   const [touched, setTouched] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const kind = KIND_SLUG[slug];
+  const kind = slug === null ? null : KIND_SLUG[slug];
   const errorId = useId();
   const hintId = useId();
+
+  /**
+   * A pasted link answers the question by itself. `github.com/torvalds` can only
+   * mean one platform, so asking after that would be pedantry — and it is the
+   * paste, not the typing, that people do when they arrived from somewhere else.
+   */
+  function onType(value: string) {
+    setRaw(value);
+    const v = value.toLowerCase();
+    if (/(^|\/\/|\.)github\.com\//.test(v)) setSlug("gh");
+    else if (/(^|\/\/|\.)(x|twitter)\.com\//.test(v)) setSlug("x");
+  }
 
   // One validation path for the live hint and for submit, so the two can never
   // disagree. Recomputed when the kind changes too: `elon-musk` is a valid
   // GitHub handle and an invalid X one.
   const { handle, problem } = useMemo(() => {
-    if (raw.trim() === "") return { handle: null, problem: null };
+    if (raw.trim() === "" || kind === null) {
+      return { handle: null, problem: null };
+    }
     try {
       return { handle: normalizeHandle(raw, kind), problem: null };
     } catch (err) {
@@ -56,7 +84,8 @@ export default function HandleSearch({
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!handle) return;
+    // Both, always: a handle with no platform is not a destination.
+    if (!handle || slug === null) return;
     startTransition(() => router.push(`/p/${slug}/${handle}`));
   }
 
@@ -76,7 +105,7 @@ export default function HandleSearch({
           ))}
         </div>
 
-        {showExamples && (
+        {showExamples && slug !== null && (
           <button
             type="button"
             className="btn btn-quiet"
@@ -95,14 +124,16 @@ export default function HandleSearch({
           className="input-group flex-1"
           aria-invalid={showError ? "true" : undefined}
         >
-          <span className="input-prefix">{kindUrlPrefix(kind)}</span>
+          <span className="input-prefix">
+            {kind === null ? "…/" : kindUrlPrefix(kind)}
+          </span>
           <input
             className={`input-bare ${big ? "py-3.5 text-base" : ""}`}
             placeholder="username"
             value={raw}
-            onChange={(e) => setRaw(e.target.value)}
             onBlur={() => setTouched(true)}
-            maxLength={kindMaxLength(kind) + 24} // room for a pasted full URL
+            onChange={(e) => onType(e.target.value)}
+            maxLength={(kind === null ? 39 : kindMaxLength(kind)) + 24} // room for a pasted full URL
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
@@ -113,7 +144,7 @@ export default function HandleSearch({
         <button
           type="submit"
           className={`btn btn-primary ${big ? "btn-lg" : ""}`}
-          disabled={raw.trim() === "" || pending}
+          disabled={raw.trim() === "" || slug === null || pending}
         >
           {pending && <span className="spinner" aria-hidden />}
           {pending ? "Opening…" : "Find"}
@@ -126,13 +157,18 @@ export default function HandleSearch({
         </p>
       ) : (
         <p id={hintId} className="mt-2 text-xs text-mute">
-          {handle && handle !== raw.trim() ? (
+          {slug === null ? (
+            <>
+              Pick the platform first — the same name can be two different
+              people.
+            </>
+          ) : handle && handle !== raw.trim() ? (
             <>
               reads as <span className="mono text-dim">{handle}</span> — a
               full URL, an @ prefix or capitals all resolve to the same identity
             </>
           ) : (
-            kindHint(kind)
+            kindHint(kind!)
           )}
         </p>
       )}

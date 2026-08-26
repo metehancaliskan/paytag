@@ -433,6 +433,123 @@ GitHub ──approves──▶ Supabase Auth ──provider_token──▶ /auth
 
 The endpoint refuses any `kind` other than `0x00`; see §7.4.
 
+### 4.4b Adding the SECOND provider is a link, not a sign-in
+
+Verifying X while already signed in as GitHub is a different operation from
+signing in, and calling the wrong one is a real defect that reached the
+deployment:
+
+| | What it does |
+|---|---|
+| `signInWithOAuth` | Starts a sign-in. Supabase attaches the provider to the existing user **only** if it returns a verified email matching the one on file. |
+| `linkIdentity` | Attaches the provider to the signed-in user. Requires *Manual linking* in the project's Auth settings. |
+
+X's `users.read` scope returns **no email at all**, so the first row can never
+attach — it creates a second Supabase user. The reader, who pressed "Verify" on
+the X row of their own claim page, was then signed in as an account with no
+identities: their GitHub verification appeared to have been forgotten and the
+interface asked them to verify GitHub again. Nothing was actually lost — their
+`identities` row was untouched — but nothing said so either.
+
+So `useIdentity.signIn` asks the session first: no user, `signInWithOAuth`; a
+user, `linkIdentity`. And because the outcome depends on a dashboard setting we
+cannot read from the browser, the callback verifies it rather than assuming:
+`&link=1` in the redirect says "this was meant to be a link", and if the
+exchanged session belongs to a user with **no** identity rows, the link did not
+happen. Nothing is written, the stray session is signed out, and the reader is
+told to sign in again with the handle they had.
+
+The stray Supabase user survives that path, with no Paytag profile and no
+identity — invisible to the product, and the honest cost of not being able to
+undo an `exchangeCodeForSession` that already replaced the cookie.
+
+### 4.4c When two accounts hold one person
+
+A person can end up with their GitHub under one Paytag profile and their X under
+another. `unique (kind, handle)` then makes each account permanently unable to
+verify the other's handle, and until now there was no way out through the
+product: `identities` has no write policy for `authenticated` at all, and
+nothing in the interface unlinks anything.
+
+Three separate mechanisms now cover it, and it is worth saying which does what,
+because only one of them is automatic:
+
+| State | What happens |
+|---|---|
+| The provider account is on record under **another profile**, same `external_id`, and a **merge was armed** by that profile | **Moved.** The row comes across, and its card and payout address with it. |
+| The same, with **no merge armed** | **Refused** (`identity_on_another_account`). An ordinary sign-in never moves anything. |
+| The provider account is on record under another profile, and this profile already has a handle of that kind | **Refused** (`kind_already_verified_here`). Two cards, one slot; nothing moves. |
+| The **handle** is on record with a *different* `external_id` | **Refused** (`handle_taken_by_another_account`). A recycled username is somebody else's account with the same name. |
+| Supabase refuses the link because the provider account is attached to another **auth user** | Told plainly (`link_identity_taken`): sign in as it, delete that account, then add it here. |
+
+**Nothing moves without an explicit intent, and that is not caution — it is the
+only correct answer.** Move a row whenever the ids match and two accounts
+belonging to one person pass their card and payout address back and forth
+depending on which login they happened to use, silently, forever. Refuse always
+and a real split is permanent. So there is a third option: a token.
+
+`POST /api/account/merge` mints it while the account's session is live — an HMAC
+over `profileId.expiry` in an HttpOnly cookie, ten minutes, keyed on
+`sha256("paytag.merge-intent.v1" ‖ verifier seed)` so a merge signature can never
+be replayed as a claim signature. That token is the proof for the half of the
+merge OAuth cannot give us:
+
+```
+the arriving handle   ← the provider's answer to a token we just received (§4.4)
+the account you keep  ← the merge intent cookie
+```
+
+**Direction.** The account that survives is the one that *armed* the merge — the
+one the reader was using when they pressed the button, because "bring my other
+handle here" is what they asked. The account they sign in as during the flow is
+absorbed, and its login is removed: Supabase cannot merge two auth users, so one
+of the two has to go, and deleting it also frees its provider identity so the
+handle can later be added back as a second way to sign in. The reader signs in
+once more afterwards, with the account they kept.
+
+The clash check runs **before any write**: if both accounts hold a handle on the
+same platform there is one slot for two cards, so nothing moves at all
+(`merge_kind_clash`). A half-merged pair would be worse than a refused one.
+
+Moving is safe for exactly one reason, and it is worth being precise about it:
+`(kind, external_id)` is unique, and `external_id` comes from the provider's own
+answer to a token we just received (§4.4). So a matching row **is** the same
+provider account, and the person who completed OAuth is the one the provider says
+owns it. Ownership is never in question — only which profile holds it. The rule
+is `decideAdoption()` in `lib/identity-adoption.ts`, tested on its own precisely
+because it is the only rule in the product that moves data between accounts, and
+the token is tested in `lib/merge-intent.test.ts` — swapped profile id, extended
+expiry and a signature from another key all read as no intent at all.
+
+**What a wallet cannot do here.** The obvious shortcut is "two accounts sharing a
+payout address are one person". They are not: the app never asks Freighter to
+sign anything, so a connected address proves possession of nothing — anyone can
+type any `G…`. And payout addresses are private per identity under RLS
+(`payout_select_own`), so matching them across accounts would mean reading
+another account's private data to draw a conclusion the data cannot support. A
+wallet could only ever be identity evidence through a signed challenge, and even
+then it would be evidence about a key, not about the handle senders actually
+paid.
+
+What follows the identity, and what does not:
+
+- **`cards.profile_id` and `payout_prefs.profile_id` follow**, in that order,
+  after the identity itself has moved. They are denormalized copies guarded by
+  triggers (`cards_profile_matches_identity`, `payout_profile_matches_identity`)
+  that fire on writes to *those* tables only — an identity moving between
+  profiles fires neither, so a half-done adoption would leave a card whose owner
+  disagrees with its identity's and the next card edit would fail. The two
+  updates are idempotent and run on **every** sign-in, so that state cannot
+  persist.
+- The payout address moves rather than being cleared. `claim-auth` reads it by
+  `identity_id` with the service role and refuses every other recipient, while
+  the reader sees only their own rows under RLS — left behind, it would lock the
+  escrow to an address its owner can neither read nor change.
+- **`claim_nonces` is never touched.** It is the record that a nonce was signed
+  at most once, and it is allowed to outlive the account it belonged to.
+- The old profile is left in place, empty but valid. Deleting it could cascade
+  away identities of *other* kinds that legitimately belong to it.
+
 ### 4.5 How long a claim authorization lives
 
 `CLAIM_AUTH_LEDGERS = 120` ledgers, about 10 minutes at ~5 s/ledger
