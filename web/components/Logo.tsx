@@ -1,83 +1,60 @@
+import Image from "next/image";
+import mark from "@/public/paytag-mark.png";
+
 /**
- * The Paytag mark: a price tag with an @ punched through it.
+ * The Paytag mark.
  *
- * The two halves are the product — a tag is the money waiting, an @ is the
- * person it is waiting for — so the mark says what the app does without a word
- * of copy. Both motifs recur in the interface: @ wherever an identity is shown,
- * the tag wherever escrow is.
+ * It used to be drawn here as SVG paths, tuned per size. It is now a single
+ * raster tile — `public/paytag-mark.png`, cut from the 4096px master in
+ * `brand/` — because the brand asset is the artwork, and a hand-drawn
+ * approximation of it in code would drift from it the first time either changed.
  *
- * Every part is a path. A logo must not depend on a font: the `@` glyph is
- * drawn differently on macOS, Windows and Android, and a brand that changes
- * shape per platform is not a brand.
+ * What that trades away, stated rather than discovered later:
  *
- * Two cuts, on purpose:
- *   full  — the @ with its tail. Header, app icon, avatars. Needs ~24px+.
- *   tight — the @ reduced to its ring. 16–20px, where the tail turns to mush.
+ * - **No per-size cut.** The SVG had a `tight` variant that dropped the @'s tail
+ *   below 24px. A raster cannot do that, so the framing is the compromise: the
+ *   master carries ~21% padding on every side, which is right for an iOS app
+ *   icon and far too much at 16px, so the header mark and the favicon are cut
+ *   from a tighter crop of the same art (12% margin). The tab and the header
+ *   then read as the same logo, which they did not with the master's framing.
+ * - **The colour no longer follows `--accent`.** The tile carries its own green
+ *   (#248 25e-ish, close to but not identical to the token). Changing the accent
+ *   token will not change the mark; the master has to be re-exported.
+ * - **One tile for both themes.** The artwork has a filled background, so it
+ *   needs no light/dark variant — it sits on either page colour unchanged.
  *
- * Both cuts keep the punched hole: it is the one detail that makes the shape
- * read as a price tag instead of a shield, and it holds at 16px.
+ * The rounded corner is applied here rather than baked in, so the same square
+ * tile can serve as an app icon (where the platform masks it) and as an inline
+ * mark (where it needs the product's own radius).
  */
 
 type Props = {
-  /** Side of the rounded badge, in pixels. */
+  /** Side of the rounded tile, in pixels. */
   size?: number;
   className?: string;
-  /** Drop the @'s tail. Default below 24px, since that is where it blurs. */
-  tight?: boolean;
 };
 
-export default function Logo({ size = 32, className, tight }: Props) {
-  const small = tight ?? size < 24;
-  const radius = Math.round(size * 0.28);
-
+export default function Logo({ size = 32, className }: Props) {
   return (
-    <span
+    <Image
+      src={mark}
+      alt=""
       aria-hidden
+      width={size}
+      height={size}
+      // 96px of art for a 30px mark: enough for a 3× screen. Not `unoptimized`
+      // like the remote avatars — this one is a local static import, so Next
+      // knows its dimensions and can serve a resized copy.
+      sizes={`${size}px`}
+      priority
       className={className}
       style={{
-        display: "grid",
-        placeItems: "center",
-        width: size,
-        height: size,
-        borderRadius: radius,
-        background: "var(--accent)",
+        // 28% of the side, the same rule the drawn badge used, so the mark keeps
+        // its shape relationship with cards and buttons at every size.
+        borderRadius: Math.round(size * 0.28),
         flex: "none",
       }}
-    >
-      <svg viewBox="0 0 100 100" width={size} height={size}>
-        {/* the tag */}
-        <path
-          fill="#fff"
-          d="M52 14h30a6 6 0 0 1 6 6v30a6 6 0 0 1-1.76 4.24L56.24 84.24a6 6 0 0 1-8.48 0L15.76 52.24a6 6 0 0 1 0-8.48L47.76 15.76A6 6 0 0 1 52 14Z"
-        />
-        {/* The punched hole. One dot is what makes it read as a *price tag*
-            rather than a shield, and it survives all the way down to 16px. */}
-        <circle cx="77" cy="25" r="4.5" fill="var(--accent)" />
-        {small ? (
-          <circle
-            cx="50"
-            cy="50"
-            r="14"
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth="9"
-          />
-        ) : (
-          <>
-            <g
-              fill="none"
-              stroke="var(--accent)"
-              strokeWidth="7.5"
-              strokeLinecap="round"
-            >
-              <path d="M64.5 62.5a17 17 0 1 1 2-19.5" />
-              <path d="M66.5 43v17c0 4 5 4.5 6.5 1.5" />
-            </g>
-            <circle cx="50" cy="50" r="6.5" fill="var(--accent)" />
-          </>
-        )}
-      </svg>
-    </span>
+    />
   );
 }
 

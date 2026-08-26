@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import WalletBar from "@/components/WalletBar";
+import IdentityProvider from "@/components/IdentityProvider";
 import Logo from "@/components/Logo";
 import { Sliders } from "@/components/icons";
 import { NETWORK } from "@/lib/config";
@@ -22,7 +23,10 @@ const NAV = [
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <>
+    // One identity fetch for the whole product, here rather than in each of the
+    // eight components that need it. Settings alone used to ask five times, with
+    // five loading states that could contradict each other on screen.
+    <IdentityProvider>
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
           <Link href="/app" className="flex items-center gap-2.5">
@@ -63,6 +67,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-5 py-8">
         {children}
       </main>
-    </>
+    </IdentityProvider>
   );
 }

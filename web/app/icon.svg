@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Favicon cut of the Paytag mark: the @ reduced to its ring, because a
-       tail is a smudge at 16px. components/Logo.tsx carries the full mark. -->
-  <rect width="100" height="100" rx="26" fill="#12925d"/>
-  <path fill="#fff" d="M52 14h30a6 6 0 0 1 6 6v30a6 6 0 0 1-1.76 4.24L56.24 84.24a6 6 0 0 1-8.48 0L15.76 52.24a6 6 0 0 1 0-8.48L47.76 15.76A6 6 0 0 1 52 14Z"/>
-  <circle cx="77" cy="25" r="4.5" fill="#12925d"/>
-  <circle cx="50" cy="50" r="14" fill="none" stroke="#12925d" stroke-width="9"/>
-</svg>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import Modal from "./Modal";
 import CopyButton from "./CopyButton";
 import { kindUrlPrefix, slugOf, type IdentityKind } from "@/lib/identity";
 import { ROLES, roleForKind } from "@/lib/roles";
@@ -18,10 +18,9 @@ import { ROLES, roleForKind } from "@/lib/roles";
  * the one place a modal is the honest control: there is nothing else to do on
  * this page, and the reader has to be told the page exists somewhere else now.
  *
- * A native `<dialog>`, not a div with a z-index. The browser gives the focus
- * trap, the Esc key, the top layer and the backdrop for free, and every one of
- * those is a thing hand-rolled modals get wrong. Backdrop clicks close it too,
- * which `<dialog>` does not do on its own.
+ * The dialog mechanics live in `Modal` — one shell for every dialog in the
+ * product, so a second one cannot get the focus trap or the backdrop subtly
+ * different from this one.
  */
 export default function PublishedDialog({
   open,
@@ -37,44 +36,21 @@ export default function PublishedDialog({
   handle: string;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
   const path = `/p/${slugOf(kind)}/${handle}`;
 
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-
+  // The body is a separate component because `Modal` renders its children only
+  // while open: that is what makes the absolute link safe to read straight from
+  // `window`, with no server render to disagree with.
   return (
-    <dialog
-      ref={ref}
-      className="modal"
-      // `close` fires for Esc and for the backdrop click below alike, so the
-      // parent's state cannot drift out of step with the element's.
-      onClose={onClose}
-      // The backdrop is the dialog's own box; a click that lands on the element
-      // itself rather than on anything inside it landed outside the panel.
-      onClick={(e) => {
-        if (e.target === ref.current) ref.current?.close();
-      }}
-      aria-labelledby="published-title"
-    >
-      {/* Contents only while open, and that is what makes the absolute link
-          safe to read straight from `window`: the server renders this dialog
-          empty, so there is no first client render to disagree with. A link
-          that differed between the two would be a hydration error. */}
-      {open && (
-        <Body
-          published={published}
-          kind={kind}
-          handle={handle}
-          path={path}
-          onDone={() => ref.current?.close()}
-        />
-      )}
-    </dialog>
+    <Modal open={open} onClose={onClose} labelledBy="published-title">
+      <Body
+        published={published}
+        kind={kind}
+        handle={handle}
+        path={path}
+        onDone={onClose}
+      />
+    </Modal>
   );
 }
 

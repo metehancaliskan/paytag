@@ -7,29 +7,44 @@ hold in their head is one that drifts by the third screen.
 
 ## The mark
 
-A price tag with an **@** punched through it.
+A price tag with an **@** punched through it, on a green tile.
 
 ```
 tag  = money waiting in escrow
 @    = the person it is waiting for
 ```
 
-Those are the only two nouns in the product, so the logo needs no tagline.
-`components/Logo.tsx` draws it, and both motifs recur inside the interface: an
-**@** wherever an identity appears, the tag wherever escrow does.
+Those are the only two nouns in the product, so the logo needs no tagline. Both
+motifs recur inside the interface: an **@** wherever an identity appears, the tag
+wherever escrow does.
 
-**The punched hole is not decoration.** One dot near the narrow end is what
-makes the silhouette read as a *price tag* rather than a shield, and it is the
-one detail that survives down to 16px. Both cuts keep it.
+**The mark is artwork, not code.** `brand/paytag-white-theme-logo.png` is the
+4096px master; everything shipped is cut from it, and nothing redraws it:
 
-**Every part is a path.** A logo may not depend on a font — the `@` glyph is
-drawn differently on macOS, Windows and Android, and a brand that changes shape
-per platform is not a brand.
+| File | Size | Framing |
+|---|---|---|
+| `public/paytag-mark.png` | 96 | tight — the header, via `components/Logo.tsx` |
+| `app/icon.png` | 32 | tight — the browser tab |
+| `app/apple-icon.png` | 180 | as drawn — iOS masks it and expects the padding |
+| `public/icon-512.png` | 512 | as drawn — home screen / PWA |
 
-**Two cuts.** `full` keeps the @'s tail and needs about 24px. `tight` reduces
-the @ to its ring, for 16–20px, where the tail turns to mush. `Logo` switches
-automatically at 24px; `app/icon.svg` is the tight cut, because that file is
-only ever seen as a favicon.
+**Two framings, one reason.** The master carries about 21% padding on each side,
+which is right for an app icon inside a platform's rounded mask and far too much
+at 16px — the tag closes up and the @ becomes a dot. So the tab and the header
+are cut from the same art with a 12% margin, and the two then read as the same
+logo. Anything below 24px gets the tight cut; anything a platform masks gets the
+master's own framing.
+
+**What the raster costs, said plainly.** The mark no longer follows `--accent`:
+the tile carries its own green, so changing the token changes the buttons and not
+the logo — a new accent means re-exporting the master. And there is no per-size
+cut any more: the old SVG dropped the @'s tail below 24px, a raster cannot, and
+the tighter framing is what stands in for it.
+
+**One tile for both themes.** The artwork has a filled background, so it needs no
+light/dark variant. The rounded corner is applied in `Logo.tsx` (28% of the
+side), not baked into the file, so the same square serves as an app icon and as
+an inline mark.
 
 ---
 
