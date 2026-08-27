@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -19,6 +18,8 @@ import { fetchGithubProfile, type GithubProfile } from "@/lib/github";
 import ProfilePanel from "@/components/ProfilePanel";
 import ShareLink from "@/components/ShareLink";
 import { PersonCardDetail, NoCardYet } from "@/components/PersonCard";
+import Avatar from "@/components/Avatar";
+import { avatarUrl } from "@/lib/cards";
 import { getCard } from "@/lib/cards.server";
 
 // Same reason as the directory: this page's freshness must not depend on
@@ -138,23 +139,13 @@ function IdentityCard({
       <span className="badge">{label} identity</span>
 
       <div className="mt-4 flex items-center gap-4">
-        {profile ? (
-          <Image
-            src={profile.avatarUrl}
-            alt=""
-            width={64}
-            height={64}
-            className="rounded-full border border-line"
-            unoptimized
-          />
-        ) : (
-          <div
-            aria-hidden
-            className="grid h-16 w-16 place-items-center rounded-full border border-line bg-raised text-xl font-bold text-mute"
-          >
-            {handle.slice(0, 2).toUpperCase()}
-          </div>
-        )}
+        {/* GitHub's answer if we have it, otherwise the derived URL — which is
+            how an X page gets a picture at all (lib/cards.ts). */}
+        <Avatar
+          src={profile?.avatarUrl ?? avatarUrl({ kind, handle })}
+          handle={handle}
+          size={64}
+        />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-bold">
             {profile?.name ?? handle}

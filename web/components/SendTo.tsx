@@ -1,9 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import Avatar from "./Avatar";
 import SendForm from "./SendForm";
+import { avatarUrl } from "@/lib/cards";
 import { browserSupabase } from "@/lib/supabase/client";
 import { lookupGithub, type GithubProfile } from "@/lib/github";
 import { latestLedger } from "@/lib/contract";
@@ -46,12 +47,14 @@ import {
  *             own IP. $0 at any traffic level, and it cannot be exhausted by
  *             other people's traffic. Repeat presses on one handle are served
  *             from the per-tab cache in lib/github.ts.
- *   X       → nothing, and that is a costed decision. X charges $0.010 per user
- *             lookup against our credit balance, with no free allowance, so an
- *             existence check on an anonymous page is a $36-an-hour hole for
- *             anybody with curl. This says plainly that we cannot confirm the
- *             account and links the profile so the reader looks with their own
- *             eyes — better than presenting an unchecked handle as checked.
+ *   X       → no API call, and that is a costed decision. X charges $0.010 per
+ *             user lookup against our credit balance, with no free allowance, so
+ *             an existence check on an anonymous page is a $36-an-hour hole for
+ *             anybody with curl. What the reader gets instead is the profile
+ *             picture (lib/cards.ts — a free third-party avatar URL loaded by
+ *             their own browser) and a link to the profile. A face they
+ *             recognise is a better check than a sentence saying we could not
+ *             make one, and no photo at all is itself a signal.
  *   Paytag  → our own `identities` table, which is world readable. Free, and the
  *             most useful line of the three: it says whether this handle can
  *             claim today or whether the money will sit until somebody verifies.
@@ -194,23 +197,13 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
           {/* What came back. The reader decides from this, so it says what it
               knows and what it does not. */}
           <div className="mt-4 flex items-start gap-3 border-t border-line pt-4">
-            {checked.profile ? (
-              <Image
-                src={checked.profile.avatarUrl}
-                alt=""
-                width={44}
-                height={44}
-                className="h-11 w-11 shrink-0 rounded-full border border-line"
-                unoptimized
-              />
-            ) : (
-              <span
-                aria-hidden
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line bg-raised text-sm font-bold text-mute"
-              >
-                {checked.handle.slice(0, 2).toUpperCase()}
-              </span>
-            )}
+            <Avatar
+              src={
+                checked.profile?.avatarUrl ??
+                avatarUrl({ kind, handle: checked.handle })
+              }
+              handle={checked.handle}
+            />
 
             <div className="min-w-0 flex-1">
               <p className="font-semibold">
@@ -248,16 +241,18 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
                 )}
               </p>
 
+              {/* Only the one case that is actually unusual gets a line of its
+                  own: we asked GitHub and GitHub did not answer. The X section
+                  used to carry a permanent warning saying we cannot confirm the
+                  account — permanent, so it was wallpaper rather than a warning,
+                  and it appeared under a card that already shows the picture and
+                  links the profile. What replaced it is the picture: if the
+                  account does not resolve, there is no photo, and the reader can
+                  see that faster than they can read a sentence. */}
               {checked.unreachable && (
                 <p className="mt-2 text-xs text-warn">
                   GitHub would not answer, so this account is unconfirmed. Open
                   the profile above before sending.
-                </p>
-              )}
-              {kind === KIND.XUser && (
-                <p className="mt-2 text-xs text-warn">
-                  X has no free way for us to confirm an account exists. Open the
-                  profile above and check it is the right one.
                 </p>
               )}
             </div>

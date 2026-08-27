@@ -121,15 +121,40 @@ export function cardPath(card: {
 }
 
 /**
- * A GitHub avatar without an API call and without a token: github.com/<user>.png
- * is a permanent redirect to the avatar. X has no equivalent public endpoint,
- * so an X-only card falls back to initials.
+ * The profile picture for a handle, without an API call and without a token.
+ *
+ * GitHub: `github.com/<user>.png` is a permanent redirect to the avatar. Free,
+ * official, unmetered.
+ *
+ * X: there is no such endpoint. X's own API would charge $0.010 per lookup
+ * (docs/API-COSTS.md), and scraping x.com is against their terms and breaks
+ * whenever the page changes. So this goes through unavatar.io, which resolves an
+ * X handle to its picture. What that buys and what it costs:
+ *
+ *   - Free, no key. The 25-per-day anonymous quota is counted against the
+ *     VISITOR's IP, like GitHub's rate limit, because these URLs are loaded by
+ *     the browser as `<img>` sources. Their cache hits do not count at all, so
+ *     handles anybody has looked at recently are free.
+ *   - `fallback=false` is the important parameter. Without it a name nobody
+ *     holds comes back as a generic silhouette WITH a 200 — a picture that
+ *     looks like a real account's. With it, an unresolvable handle 404s and
+ *     <Avatar> shows initials instead. A missing picture is honest; an invented
+ *     one on a page about to move money is not.
+ *   - It is a third party in the request path: unavatar sees the visitor's IP
+ *     and which X handle is being displayed. The same is already true of
+ *     GitHub's avatar CDN. Nothing else is sent, and no picture is ever
+ *     evidence: an avatar that loads does not mean the account is the right
+ *     one, and the interface must not imply that it does.
  */
 export function avatarUrl(card: {
   kind: IdentityKind;
   handle: string;
 }): string | null {
-  return card.kind === KIND.GithubUser
-    ? `https://github.com/${card.handle}.png?size=128`
-    : null;
+  if (card.kind === KIND.GithubUser) {
+    return `https://github.com/${card.handle}.png?size=128`;
+  }
+  if (card.kind === KIND.XUser) {
+    return `https://unavatar.io/x/${encodeURIComponent(card.handle)}?fallback=false`;
+  }
+  return null;
 }

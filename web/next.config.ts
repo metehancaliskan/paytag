@@ -2,13 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    // Avatars come from GitHub and are rendered with `unoptimized`, so nothing
-    // here is resized on our side. The hosts are still declared: a production
-    // build validates remote `src` against this list, and finding that out from
-    // a blank avatar on the live site is a bad way to learn it.
+    // Avatars are rendered with `unoptimized`, so nothing here is resized on our
+    // side. The hosts are still declared: a production build validates remote
+    // `src` against this list, and finding that out from a blank avatar on the
+    // live site is a bad way to learn it.
+    //
+    // unavatar.io is the X profile picture (lib/cards.ts). X has no public
+    // avatar endpoint of its own, and its API charges per lookup.
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "github.com" },
+      { protocol: "https", hostname: "unavatar.io" },
     ],
   },
 

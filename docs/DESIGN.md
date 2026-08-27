@@ -163,11 +163,20 @@ reads what came back:
   their account, and it says so instead of passing it off as a pass.
 - X gets no lookup at all, and that is priced rather than postponed: $0.010 per
   lookup off our own credit balance, so an existence check on an anonymous page
-  is a hole anybody with curl can pour money through. The page says plainly that
-  we cannot confirm the account and links the profile, rather than implying a
-  check it did not make. GitHub is free because it runs in the browser against
-  the visitor's own rate limit. Both figures, and what turning X on would
-  require, are in docs/API-COSTS.md.
+  is a hole anybody with curl can pour money through. GitHub is free because it
+  runs in the browser against the visitor's own rate limit. Both figures, and
+  what turning X on would require, are in docs/API-COSTS.md.
+- **What the X card shows instead is the face, not a disclaimer.** It used to
+  carry a permanent yellow line saying we could not confirm the account. Always
+  there means wallpaper: a warning that fires on every single check trains the
+  reader to skip the place warnings appear. It is gone, and the profile picture
+  took its job — free, from the visitor's own browser, and absent when the handle
+  does not resolve, which the reader reads faster than a sentence. The one yellow
+  line left on the page is the genuinely unusual case: we asked GitHub and GitHub
+  did not answer.
+- **A picture is never proof.** `<Avatar>` falls back to initials rather than a
+  broken image, and it tracks the failure by URL so one person's missing photo
+  cannot appear on the next person's row.
 - The check is a **button**, never a keystroke. Per-character lookups mean a
   dozen requests to type one handle, most of them for prefixes of it — a spent
   rate limit on the free API and a dozen times the bill on a paid one.

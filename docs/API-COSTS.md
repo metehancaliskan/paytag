@@ -65,6 +65,30 @@ confirm the account and links the profile so the reader checks with their own
 eyes. That is honest — an unchecked handle presented as checked would be worse
 than no check — and it costs nothing.
 
+### The profile picture is a separate question, and it is free
+
+X's own API would hand over `profile_image_url` as part of that $0.010 user read.
+We do not buy it. `avatarUrl()` in `lib/cards.ts` returns
+`unavatar.io/x/<handle>?fallback=false`, loaded by the visitor's browser as an
+`<img>` source:
+
+- **$0 to us.** No key. The anonymous quota (25/day) is counted against the
+  visitor's IP, exactly like GitHub's rate limit, and their cache hits do not
+  count at all.
+- **`fallback=false` matters.** Without it an unresolvable handle answers 200
+  with a generic silhouette — a picture that reads as a real account on a page
+  about to move money. With it the request 404s and `<Avatar>` shows initials.
+- **A third party is in the request path.** unavatar (microlink) sees the
+  visitor's IP and which X handle is on screen. GitHub's avatar CDN already sees
+  the same for GitHub handles. Nothing else is sent.
+- **It is not evidence.** A picture that loads does not mean this is the right
+  account, and no copy on the page says otherwise. It is a face to recognise,
+  which is a better check than a sentence saying we could not make one.
+
+If unavatar disappears or throttles, every X avatar becomes initials and nothing
+else changes. That is the whole blast radius, which is why a third party is
+acceptable here and would not be in the claim path.
+
 ### What it would take to turn the X check on
 
 If it is ever wanted, these four together, not any one of them alone:

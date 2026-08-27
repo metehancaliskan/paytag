@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import Avatar from "./Avatar";
 import { avatarUrl, cardPath, type PersonCard } from "@/lib/cards";
 import { KIND, kindUrlPrefix } from "@/lib/identity";
 import { ROLES, roleForKind } from "@/lib/roles";
@@ -41,23 +41,7 @@ export default function PersonCardView({
   const body = (
     <>
       <div className="flex items-start gap-3">
-        {avatar ? (
-          <Image
-            src={avatar}
-            alt=""
-            width={44}
-            height={44}
-            className="h-11 w-11 shrink-0 rounded-full border border-line"
-            unoptimized
-          />
-        ) : (
-          <span
-            aria-hidden
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-line bg-raised text-sm font-bold text-mute"
-          >
-            {card.handle.slice(0, 2).toUpperCase()}
-          </span>
-        )}
+        <Avatar src={avatar} handle={card.handle} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
