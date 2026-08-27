@@ -14,7 +14,7 @@ import { KIND, type IdentityKind } from "@/lib/identity";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Discover — Paytag",
+  title: "Dashboard — Paytag",
   description:
     "Developers and community contributors in the Stellar ecosystem, each one payable by handle. The money waits in escrow until they withdraw it.",
 };
@@ -62,15 +62,17 @@ export default async function Dashboard({
         </p>
       )}
 
-      {/* Nothing about the reader on this page.
+      {/* No heading. "People to pay" sat above a grid of people to pay, and the
+          header already says Dashboard — a title that repeats its own contents
+          is a line of text between the reader and the thing.
+
+          Nothing about the reader on this page either.
           It carried two things that stopped paying for themselves: a "listed as
           @you" row, when an account holds at most two cards and Settings already
           lists them; and a handle field, when the directory shows everyone. That
           field now lives in exactly one place — the 404 page, where a mistyped
           handle actually lands. It used to sit under a person's page too, which
           read as "or maybe not them". */}
-
-      <h1 className="text-2xl font-bold tracking-tight">People to pay</h1>
 
       {/* One filter. Links rather than buttons: a filtered list is worth
           sharing, and the back button should undo a filter. The chips carry the

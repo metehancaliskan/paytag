@@ -286,6 +286,156 @@ fn the_second_handle_cannot_reuse_the_first_ones_nonce() {
     assert_eq!(f.client.get_payment(&x_id).status, Status::Pending);
 }
 
+// ---------------------------------------------------------------- two strangers
+//
+// Everything above is one person holding two handles. The dangerous case is the
+// same shape with two DIFFERENT humans in it: @metehancaliskan on GitHub is one
+// person, @metehancaliskan on X is somebody else entirely, and neither of them
+// has any say over the other's account. Money arrives for the X one. Can the
+// GitHub one take it?
+//
+// The four ways they could try, and what stops each:
+//
+//   1. Present their own valid GitHub authorization against the X payment
+//      → IdentityMismatch. The tag is stored per payment and compared per
+//        payment; the authorization only says which tag it is for.
+//   2. Claim to be the X tag while holding a GitHub authorization
+//      → the signature does not verify: the identity is inside the signed
+//        preimage (`a_github_authorization_cannot_be_repointed_at_the_x_tag`).
+//   3. Sign an X authorization with their own keypair
+//      → does not verify either; only the verifier's key does.
+//   4. Get the verifier to sign for the X tag
+//      → refused off chain, because verification is an OAuth round trip against
+//        the platform in the tag (SPEC §8.2). Not a contract property, and the
+//        one thing here the contract cannot enforce; hence SPEC §6.4.
+
+/// The tags are not taken on trust from the constants above: this recomputes
+/// both of them the way SPEC §2.3 defines — sha256(kind_byte ‖ utf8(handle)) —
+/// from the SAME handle bytes, and shows the digests differ. That is the whole
+/// answer to "are two identical names stored under the same key on chain": the
+/// platform is one of the hashed bytes, so they cannot be.
+#[test]
+fn the_platform_byte_is_inside_the_hash_so_one_name_gives_two_tags() {
+    let env = Env::default();
+    let name = b"metehancaliskan";
+
+    let tag = |kind: u8| -> [u8; 32] {
+        let mut buf = soroban_sdk::Bytes::from_array(&env, &[kind]);
+        buf.extend_from_array(name);
+        env.crypto().sha256(&buf).to_bytes().to_array()
+    };
+
+    // 0x00 = GithubUser, 0x02 = XUser (SPEC §2.2).
+    assert_eq!(tag(0x00), GITHUB, "the GitHub constant is that digest");
+    assert_eq!(tag(0x02), X, "and the X constant is the other one");
+    assert_ne!(tag(0x00), tag(0x02), "one name, two unrelated keys");
+}
+
+/// The attack, run for real: money is sent to the X stranger, and the GitHub
+/// stranger — holding a perfectly valid authorization for their OWN handle —
+/// points it at that payment.
+#[test]
+fn the_github_stranger_cannot_claim_the_x_strangers_money() {
+    let f = fix();
+    let attacker = Address::generate(&f.env);
+
+    // Somebody pays the X person. The GitHub person has nothing waiting.
+    let x_id = deposit(&f, &X, 20);
+
+    // A genuine authorization — the verifier really did watch this attacker
+    // prove they hold the GitHub account of that name.
+    let r = f.client.try_claim(
+        &vec![&f.env, x_id],
+        &BytesN::from_array(&f.env, &GITHUB),
+        &attacker,
+        &BytesN::from_array(&f.env, &NONCE_1),
+        &SIG_EXPIRES,
+        &sign(&f, &GITHUB, &attacker, SIG_EXPIRES, &NONCE_1),
+    );
+
+    assert_eq!(r, Err(Ok(Error::IdentityMismatch)));
+    assert_eq!(balance(&f, &attacker), 0);
+    assert_eq!(balance(&f, &f.contract_id), 20);
+    assert_eq!(f.client.get_payment(&x_id).status, Status::Pending);
+
+    // And it is still there for the person it was meant for.
+    let owner = Address::generate(&f.env);
+    f.client.claim(
+        &vec![&f.env, x_id],
+        &BytesN::from_array(&f.env, &X),
+        &owner,
+        &BytesN::from_array(&f.env, &NONCE_2),
+        &SIG_EXPIRES,
+        &sign(&f, &X, &owner, SIG_EXPIRES, &NONCE_2),
+    );
+    assert_eq!(balance(&f, &owner), 20);
+}
+
+/// The same attack with the tag stated honestly and the signature forged: the
+/// attacker signs a correctly shaped X authorization with a keypair of their
+/// own. Only the registered verifier's key verifies, so this panics inside
+/// `ed25519_verify` rather than returning an error code.
+#[test]
+#[should_panic]
+fn a_stranger_cannot_mint_their_own_authorization() {
+    let f = fix();
+    let attacker = Address::generate(&f.env);
+    let x_id = deposit(&f, &X, 20);
+
+    // Same 195-byte layout, wrong key.
+    let theirs = SigningKey::from_bytes(&[9u8; 32]);
+    let mut b = [0u8; 195];
+    b[0..15].copy_from_slice(b"paytag.claim.v1");
+    b[15..71].copy_from_slice(&strkey56(&f.contract_id));
+    b[71..103].copy_from_slice(&X);
+    b[103..159].copy_from_slice(&strkey56(&attacker));
+    b[159..163].copy_from_slice(&SIG_EXPIRES.to_be_bytes());
+    b[163..195].copy_from_slice(&NONCE_1);
+    let forged = BytesN::from_array(&f.env, &theirs.sign(&b).to_bytes());
+
+    f.client.claim(
+        &vec![&f.env, x_id],
+        &BytesN::from_array(&f.env, &X),
+        &attacker,
+        &BytesN::from_array(&f.env, &NONCE_1),
+        &SIG_EXPIRES,
+        &forged,
+    );
+}
+
+/// Two strangers, one name, both paid, both claiming at once: each gets exactly
+/// what was sent to their own platform and neither can reach the other's.
+#[test]
+fn each_stranger_gets_only_what_was_sent_to_their_own_platform() {
+    let f = fix();
+    let gh_person = Address::generate(&f.env);
+    let x_person = Address::generate(&f.env);
+
+    let gh_id = deposit(&f, &GITHUB, 30);
+    let x_id = deposit(&f, &X, 20);
+
+    f.client.claim(
+        &vec![&f.env, gh_id],
+        &BytesN::from_array(&f.env, &GITHUB),
+        &gh_person,
+        &BytesN::from_array(&f.env, &NONCE_1),
+        &SIG_EXPIRES,
+        &sign(&f, &GITHUB, &gh_person, SIG_EXPIRES, &NONCE_1),
+    );
+    f.client.claim(
+        &vec![&f.env, x_id],
+        &BytesN::from_array(&f.env, &X),
+        &x_person,
+        &BytesN::from_array(&f.env, &NONCE_2),
+        &SIG_EXPIRES,
+        &sign(&f, &X, &x_person, SIG_EXPIRES, &NONCE_2),
+    );
+
+    assert_eq!(balance(&f, &gh_person), 30);
+    assert_eq!(balance(&f, &x_person), 20);
+    assert_eq!(balance(&f, &f.contract_id), 0);
+}
+
 /// Refund is per payment as well: the sender taking back what they left for one
 /// handle does not touch what they left for the other.
 #[test]

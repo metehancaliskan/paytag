@@ -126,3 +126,82 @@ export async function handleStillBelongsTo(
     return null;
   }
 }
+
+/**
+ * The same lookup, but it says WHICH kind of nothing it found.
+ *
+ * `fetchGithubProfile` collapses "no such account" and "GitHub would not answer"
+ * into null, which is right for a page that just wants a preview and wrong for a
+ * check somebody is about to send money on: one of those means stop, the other
+ * means we could not tell. The send flow needs to say which.
+ *
+ * Safe to call from the browser, and better there: api.github.com sends
+ * `Access-Control-Allow-Origin: *`, and the unauthenticated rate limit (60 per
+ * hour) is counted against the visitor's IP rather than ours. A check that costs
+ * us nothing and cannot be exhausted by other people's traffic.
+ */
+export type GithubLookup =
+  | { status: "found"; profile: GithubProfile }
+  | { status: "missing" }
+  | { status: "unreachable" };
+
+/**
+ * Answers already paid for, for as long as this tab lives.
+ *
+ * The budget being protected is the visitor's own 60 requests per hour, and the
+ * way it gets spent is not typing — it is pressing Check on the same handle
+ * again after editing the amount, or coming back to the page. Both are the same
+ * question with the same answer, and neither should cost a request.
+ *
+ * Only definite answers are kept. `unreachable` is a fact about this moment, so
+ * caching it would make one bad second look like a broken GitHub for the rest of
+ * the visit. `missing` IS cached, deliberately: it is the answer that refuses a
+ * send, and a stranger registering that name mid-session is not a case worth
+ * spending the budget on — the send page is not verification (see
+ * `handleStillBelongsTo`, which never uses this cache).
+ *
+ * Module scope, so it dies with the tab. Nothing here is worth persisting: a new
+ * page load gets a fresh hour of budget anyway.
+ */
+const seen = new Map<string, GithubLookup>();
+
+export async function lookupGithub(handle: string): Promise<GithubLookup> {
+  const key = handle.toLowerCase();
+  const known = seen.get(key);
+  if (known) return known;
+
+  const answer = await askGithub(handle);
+  if (answer.status !== "unreachable") seen.set(key, answer);
+  return answer;
+}
+
+async function askGithub(handle: string): Promise<GithubLookup> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/users/${encodeURIComponent(handle)}`,
+      { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" },
+    );
+    if (res.status === 404) return { status: "missing" };
+    if (!res.ok) return { status: "unreachable" };
+    const u = (await res.json()) as RawUser;
+    return {
+      status: "found",
+      profile: {
+        login: u.login,
+        id: u.id,
+        name: u.name,
+        bio: u.bio,
+        avatarUrl: u.avatar_url,
+        htmlUrl: u.html_url,
+        company: u.company,
+        blog: u.blog,
+        location: u.location,
+        followers: u.followers,
+        publicRepos: u.public_repos,
+        createdAt: u.created_at,
+      },
+    };
+  } catch {
+    return { status: "unreachable" };
+  }
+}

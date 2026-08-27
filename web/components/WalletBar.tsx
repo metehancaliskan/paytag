@@ -6,7 +6,7 @@ import { useWallet } from "./WalletProvider";
 import { useIdentity, identityList, PROVIDER_KIND } from "./useIdentity";
 import { PROVIDERS } from "./providers";
 import CopyButton from "./CopyButton";
-import { CheckMark, ChevronDown, ChevronRight, GithubMark } from "./icons";
+import { CheckMark, ChevronDown, ChevronRight } from "./icons";
 import { tokenBalance } from "@/lib/contract";
 import { fromUnits, shortAddr, usdGlance, wholeUnits } from "@/lib/format";
 import { unitsToCents } from "@/lib/price";
@@ -99,37 +99,32 @@ export default function WalletBar() {
 
   if (installed === false) {
     return (
-      <div className="flex items-center gap-2">
-        <GithubLink identity={identity} />
-        <a
-          className="btn btn-ghost"
-          href="https://www.freighter.app/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Install Freighter
-        </a>
-      </div>
+      <a
+        className="btn btn-ghost"
+        href="https://www.freighter.app/"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Install Freighter
+      </a>
     );
   }
 
-  // No wallet yet. The identity still needs a way in, so it keeps its own
-  // icon-sized entry next to the primary action instead of hiding inside a
-  // menu that does not exist yet.
+  // No wallet yet, so there is no menu to hang the identity off. It does not get
+  // its own header button: the Settings icon beside this one already goes to the
+  // page that connects GitHub and X, and two icons that lead to /profile is one
+  // icon too many.
   if (!address) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="flex items-center gap-2">
-          <GithubLink identity={identity} />
-          <button
-            className="btn btn-primary"
-            onClick={connect}
-            disabled={connecting}
-          >
-            {connecting && <span className="spinner" aria-hidden />}
-            {connecting ? "Connecting…" : "Connect wallet"}
-          </button>
-        </div>
+        <button
+          className="btn btn-primary"
+          onClick={connect}
+          disabled={connecting}
+        >
+          {connecting && <span className="spinner" aria-hidden />}
+          {connecting ? "Connecting…" : "Connect wallet"}
+        </button>
         {error && (
           <span role="alert" className="max-w-xs text-right text-xs text-danger">
             {error}
@@ -315,40 +310,5 @@ export default function WalletBar() {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * The identity entry for the states with no wallet menu to put it in. Icon
- * only: the header has no room for a second labelled button, and the tooltip
- * plus aria-label carry the name.
- */
-function GithubLink({
-  identity,
-}: {
-  identity: ReturnType<typeof useIdentity>["identity"];
-}) {
-  if (identity.status === "off" || identity.status === "loading") return null;
-
-  const verified = identity.status === "verified";
-  return (
-    <Link
-      href="/profile"
-      title={verified ? `Verified as @${identity.handle}` : "Connect GitHub or X"}
-      aria-label={
-        verified ? `Verified as @${identity.handle}` : "Connect GitHub or X"
-      }
-      className="relative grid h-9 w-9 place-items-center rounded-xl border border-line bg-surface text-dim transition-colors hover:border-line-strong hover:text-text"
-    >
-      <GithubMark />
-      {verified && (
-        <span
-          aria-hidden
-          className="absolute -right-0.5 -top-0.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-accent text-accent-fg ring-2 ring-surface"
-        >
-          <CheckMark size={8} />
-        </span>
-      )}
-    </Link>
   );
 }

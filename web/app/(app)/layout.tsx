@@ -10,12 +10,14 @@ import { NETWORK } from "@/lib/config";
  * The product chrome. Everything behind "Open app" lives under this layout:
  * a header with the three places a signed-in person goes, and the account menu.
  *
- * Two links. `Discover` is where money goes out, `Claim` is where it comes in,
- * and the personal pages (your card, your identity) hang off Settings, where a
- * reader already looks for their own things.
+ * Three links, and they are the three verbs: `Dashboard` is who can be paid,
+ * `Send` is paying a handle you already know, `Claim` is money coming in. The
+ * personal pages (your card, your identity) hang off Settings, where a reader
+ * already looks for their own things.
  */
 const NAV = [
-  { href: "/app", label: "Discover" },
+  { href: "/app", label: "Dashboard" },
+  { href: "/send", label: "Send" },
   { href: "/claim", label: "Claim" },
 ];
 

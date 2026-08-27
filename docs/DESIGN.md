@@ -135,14 +135,44 @@ to pay somebody.
 
 ---
 
-## The four screens
+## The screens
 
 | Screen | One job | The one action |
 |---|---|---|
 | `/` landing | Explain it in ten seconds | **App →** |
-| `/app` dashboard | Who can be paid | A card's `$5 · $10 · $25`, or the **+** tile |
+| `/app` Dashboard | Who can be paid | A card's `$5 · $10 · $25`, or the **+** tile |
+| `/send` Send | Pay a handle you already know | **Check**, then **Send** |
+| `/claim` Claim | Money coming in | **Claim** on a row |
 | `/app/submit` | Say what you shipped, under one handle | **Publish my card** |
-| `/profile` Settings | Your handles, where they pay, your cards, the way out | Connect, or **Delete** |
+| `/profile` Settings | Your handles, where they pay, your cards | Connect, or **Disconnect** |
+
+The header carries three of them, and they are the three verbs: Dashboard, Send,
+Claim. The Dashboard has no heading of its own — "People to pay" sat above a grid
+of people to pay, and a title that repeats its own contents is a line of text
+between the reader and the thing.
+
+**Check before send, and one press per check.** `/send` is two sections, one per
+platform, because the same name on GitHub and on X can be two different people
+and a field with a platform *picker* makes the most dangerous input on the page
+look like a filter. Nothing can be sent until the reader presses **Check** and
+reads what came back:
+
+- A definite "no such account" refuses. Money bound to a tag nobody holds waits
+  until the refund window opens — a typo is not a typo, it is a week.
+- A GitHub we could not reach does *not* refuse. Our outage is not evidence about
+  their account, and it says so instead of passing it off as a pass.
+- X gets no lookup at all, and that is priced rather than postponed: $0.010 per
+  lookup off our own credit balance, so an existence check on an anonymous page
+  is a hole anybody with curl can pour money through. The page says plainly that
+  we cannot confirm the account and links the profile, rather than implying a
+  check it did not make. GitHub is free because it runs in the browser against
+  the visitor's own rate limit. Both figures, and what turning X on would
+  require, are in docs/API-COSTS.md.
+- The check is a **button**, never a keystroke. Per-character lookups mean a
+  dozen requests to type one handle, most of them for prefixes of it — a spent
+  rate limit on the free API and a dozen times the bill on a paid one.
+- Editing the handle after a check throws the check away. Otherwise the amount
+  field would still be pointed at the previous tag.
 
 **The landing page is 65 words.** It was 279, in four stacked sections — a hero,
 three "which one are you" cards, three "how it works" cards, three columns of
@@ -154,8 +184,10 @@ folded into a disclosure rather than dropped.
 
 Settings is reachable from every screen — a sliders icon beside the account
 chip, not only a row inside a dropdown. Anything a person might want to change
-about themselves is on that one page, in four labelled sections, ordered by
-dependency: an identity, then where it pays, then what it says, then leaving.
+about themselves is on that one page, in three labelled sections, ordered by
+dependency: an identity, then where it pays, then what it says. Leaving is not a
+fourth section — it lives on the handle's own row, next to the thing it
+removes.
 
 A form is ONE card. `/app/submit` was five stacked panels, which made a
 two-minute form look like a registration process and hid the two required
@@ -229,29 +261,39 @@ them is not convenience, it is a wrong answer delivered confidently.
 
 ## Destructive things
 
-`/profile` reads top to bottom in the order of dependency — identities, payout
-address, cards, and leaving — so the irreversible thing is last, where nobody
-reaches it by accident.
+**Leaving is per handle, and it sits on the handle's own row.** `/profile` reads
+top to bottom in the order of dependency — identities, payout address, cards —
+and the way out is no longer a fourth section. There was one red *Delete my
+account* button, and it was the wrong shape twice over: the account was never
+what anybody wanted to remove (a person has one or two handles, and what they
+mean is "take my X handle off"), and it forced somebody who only wanted to
+disconnect X to destroy their GitHub card with it.
 
-Red is rationed. `--danger` is a text colour everywhere except one filled
-button, `.btn-danger`, which belongs to deleting your own account and to nothing
-else. A second filled red anywhere teaches the reader to stop noticing the
-first.
+So each verified row carries a quiet **Disconnect**, and disconnecting the LAST
+handle ends the account — an account with no verified handle is not an account.
+Nothing is orphaned, and there is still exactly one way to be gone completely.
+
+Red is rationed. `--danger` is a text colour everywhere except one filled button,
+`.btn-danger`, which belongs to confirming a disconnect and to nothing else. A
+second filled red anywhere teaches the reader to stop noticing the first.
 
 The pattern for anything irreversible, and it is three rules:
 
-1. **Collapsed until asked for.** One quiet line and a link, not a red panel
+1. **Collapsed until asked for.** A quiet word on the row, not a red panel
    sitting open on a page people visit for other reasons.
-2. **Type the thing, don't click twice.** A second button gets clicked; a handle
-   has to be read first. `@handle` is the confirmation, and the server checks it
-   too — a client that skips it is not the last word.
-3. **Say what survives, not just what goes.** People read "delete my account" as
-   "lose my money". Here the escrow is untouched, and that sentence goes first —
-   an honest list is what makes the button safe to press.
+2. **The confirmation scales with what is at stake.** Two clicks to remove one of
+   two handles: the money is provably untouched and the other handle is
+   untouched. A **typed handle** when it is the last one, because that is the
+   case that ends the account — a second button gets clicked, a name has to be
+   read first, and the server checks it too.
+3. **Say what survives, not just what goes.** People read this as "lose my
+   money". The escrow is untouched, and that sentence goes in the same breath as
+   the one about the card — an honest list is what makes the button safe to
+   press.
 
 The same applies to the quieter irreversible one: a payout address is shown as
-`locked`, with the wallet it pays visible and copyable, because a destination
-you cannot read is a destination you cannot check.
+`locked`, with the wallet it pays visible and copyable, because a destination you
+cannot read is a destination you cannot check.
 
 ---
 

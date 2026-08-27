@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import ConnectPanel from "@/components/ConnectPanel";
 import PayoutPanel from "@/components/PayoutPanel";
 import MyCards from "@/components/MyCards";
-import DeleteAccount from "@/components/DeleteAccount";
 import SignOutButton from "@/components/SignOutButton";
 
 export const metadata: Metadata = {
@@ -23,8 +22,15 @@ export const metadata: Metadata = {
  *
  * The order is the order of dependency. An identity comes first because nothing
  * else works without one: a payout address needs an identity to hang off, a
- * card needs one to describe, and a claim needs one to pay. Leaving is last,
- * where nobody reaches it by accident.
+ * card needs one to describe, and a claim needs one to pay.
+ *
+ * There is no "Leave" section any more. It held one red button that deleted the
+ * whole account, which was never what anybody meant: a person has one or two
+ * handles, and what they want is to take one of them off. That now lives on the
+ * handle's own row under Accounts, per handle — and disconnecting the last one
+ * ends the account, because an account with no verified handle is not an account.
+ * Three sections instead of four, and the destructive thing sits next to the
+ * thing it destroys.
  */
 export default async function SettingsPage({
   searchParams,
@@ -62,12 +68,6 @@ export default async function SettingsPage({
           <MyCards empty="One card per handle, written after you connect." />
         </Section>
 
-        <Section
-          title="Leave"
-          hint="Deleting frees your handle. Escrow belongs to the handle, so it stays."
-        >
-          <DeleteAccount empty="Nothing to delete yet." />
-        </Section>
       </div>
     </div>
   );

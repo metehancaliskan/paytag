@@ -975,6 +975,25 @@ page reads it — both for the sentence it prints and for which row it opens on.
 handle without its kind is not an identity, and no link inside the product is
 allowed to pass one.
 
+**Two strangers, one name — run as an attack.** The table above is the design;
+`contracts/escrow/src/test_two_identities.rs` is the proof, and it is written
+adversarially rather than as one person with two handles. @name on GitHub and
+@name on X are two unrelated humans, money arrives for the X one, and the GitHub
+one tries to take it four ways:
+
+| The attempt | What stops it | Test |
+|---|---|---|
+| Present a **genuine** GitHub authorization against the X payment | `Error::IdentityMismatch` — the tag is stored per payment and compared per payment; nothing moves, including any valid payment listed alongside it | `the_github_stranger_cannot_claim_the_x_strangers_money` |
+| Claim to be the X tag while holding the GitHub authorization | the signature does not verify: the identity is one of the signed bytes | `a_github_authorization_cannot_be_repointed_at_the_x_tag` |
+| Sign a correctly shaped X authorization with their own keypair | does not verify — only the registered verifier key does | `a_stranger_cannot_mint_their_own_authorization` |
+| Get the verifier itself to sign for the X tag | refused **off chain**: verification is an OAuth round trip against the platform named in the tag (§8.2). The contract cannot enforce this one — see §6.4 | — |
+
+And the premise is not taken on trust from a comment:
+`the_platform_byte_is_inside_the_hash_so_one_name_gives_two_tags` recomputes both
+digests from the *same* handle bytes with the platform byte prepended, inside the
+test, and shows they differ. Same name, two keys, and they differ from the first
+byte — so no prefix comparison anywhere can confuse them either.
+
 ---
 
 ### 8.5 Two front doors
@@ -1070,15 +1089,30 @@ claim that reverts after the reader has already signed it. An RPC we cannot
 reach is **not** a refusal (`accountExists()` returns `null`): an outage in our
 own infrastructure is no reason to reject a wallet somebody owns.
 
-### 9.2 Deleting the account
+### 9.2 Disconnecting a handle
 
-`POST /api/account/delete`, confirmed by typing the handle. An account you
-cannot leave is not an account.
+`POST /api/account/disconnect`, one handle at a time. There is no
+"delete my account" endpoint any more, and the reason is not squeamishness: the
+account was never the unit anybody wanted to remove. A person holds one or two
+handles; what they mean by leaving is "take my X handle off" — and a single
+endpoint that could only remove both forced somebody who wanted one to destroy
+the other's card with it.
 
-What goes: the Supabase Auth user, and by the cascades in `db/schema.sql` the
-profile, the identities, the cards and the payout addresses. The handle is
-released — the `unique (kind, handle)` constraint means it was held, and after
-deletion anyone can verify it.
+**The last handle takes the account with it.** An account with no verified handle
+is not an account, so that case deletes the Supabase Auth user too, and by the
+cascades in `db/schema.sql` the profile with it. That keeps two properties at
+once: nothing is left orphaned, and there is still exactly one way to be gone
+completely.
+
+Identities are service-role-only for writes (§8.2), so this cannot be a client
+delete: RLS gives the user no DELETE on `identities` at all. The route is the
+only path, and it revalidates the session with `getUser()` before touching
+anything.
+
+What goes with a handle, by the cascades: its card and its payout address, both
+keyed on `identity_id`. The handle itself is released — `unique (kind, handle)`
+meant it was held, and afterwards anyone can verify it (in practice only the
+person the provider says owns it, §4.4).
 
 What stays, and why:
 
@@ -1088,14 +1122,18 @@ What stays, and why:
 | `claim_nonces` rows | That table is what guarantees the verifier signs a nonce at most once, and it is the only trace an incident could be reconstructed from. `profile_id` becomes NULL (`migration-002`) instead of the row disappearing. What is left in it — an identity key and a public address — is in the claim transaction on chain anyway. |
 | The provider's own record | GitHub and X keep their record that you authorized this app; the next sign-in may skip the consent screen. Revoking that is done on their side, and the interface does not pretend otherwise. |
 
-That first row is what makes deletion safe to offer at all, and it is the
-sentence the confirmation panel leads with. People read "delete my account" as
-"lose my money"; here it is the opposite, and saying so plainly is what makes
-the button pressable.
+That first row is what makes any of this safe to offer, and it is said in the
+same breath as the one about the card.
 
-Two failure modes are handled rather than assumed away. If deleting the auth
-user fails because a cascade is missing on that project, the public rows are
-cleared and the delete is retried once — a half-deleted account that can still
-sign in is worse than either outcome. And the session cookies are removed by
-hand after `signOut()`, because a `signOut` whose user no longer exists can fail
-and leave the browser holding a token that makes the app look signed in.
+**The confirmation scales with the consequence.** Removing one of two handles is
+two clicks — the money and the other handle are both provably untouched, so a
+typed confirmation would be ceremony. Removing the last one asks for the handle
+to be typed, and the server checks it: a client that skips that is not the last
+word.
+
+Two failure modes are handled rather than assumed away. If deleting the auth user
+fails because a cascade is missing on that project, the public rows are cleared
+and the delete is retried once — a half-deleted account that can still sign in is
+worse than either outcome. And the session cookies are removed by hand after
+`signOut()`, because a `signOut` whose user no longer exists can fail and leave
+the browser holding a token that makes the app look signed in.

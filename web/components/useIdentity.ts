@@ -101,6 +101,12 @@ export type IdentityApi = {
     asOtherAccount?: boolean,
   ) => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Read it again. Needed by anything that changes the answer without changing
+   * the session — disconnecting a handle is a server-side delete, so no auth
+   * event fires and nothing would otherwise notice.
+   */
+  refresh: () => void;
 };
 
 /** The identities of a verified reader, as a list — GitHub first. */
@@ -138,6 +144,11 @@ export function useIdentityState(): IdentityApi {
     AUTH_ENABLED ? { status: "loading" } : { status: "off" },
   );
   const [error, setError] = useState<string | null>(null);
+  // A generation counter rather than an exported `load`: the effect keeps its
+  // `alive` guard, so a late response from the previous read cannot overwrite
+  // the newer one.
+  const [tick, setTick] = useState(0);
+  const refresh = useCallback(() => setTick((n) => n + 1), []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -218,7 +229,7 @@ export function useIdentityState(): IdentityApi {
       alive = false;
       sub.subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [supabase, tick]);
 
   /**
    * Verify one provider and come back to `next` (a same-origin path).
@@ -309,5 +320,5 @@ export function useIdentityState(): IdentityApi {
     // disagree in the first place.
   }, [supabase]);
 
-  return { identity, error, signIn, signOut };
+  return { identity, error, signIn, signOut, refresh };
 }

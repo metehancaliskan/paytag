@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useIdentity } from "./useIdentity";
+import { useIdentity, type ProviderKey } from "./useIdentity";
 import { PROVIDERS } from "./providers";
 import { CheckMark } from "./icons";
 import { describeAuthError } from "@/lib/auth-errors";
@@ -33,6 +34,18 @@ import { X_ENABLED } from "@/lib/config";
  * There is still a click, and there has to be: the join removes one of the two
  * logins and signs the reader out. Doing that as a silent consequence of Connect
  * would be the wrong kind of smooth.
+ *
+ * LEAVING LIVES HERE TOO, per handle. There is no "delete my account" any more:
+ * the account was never the thing anybody wanted to remove — a person has one or
+ * two handles, and what they mean is "take my X handle off". One red button that
+ * could only do both, and forced somebody who wanted to disconnect X to destroy
+ * their GitHub card with it, was the wrong shape. So each verified row can be
+ * disconnected on its own, and the LAST one takes the account with it, because an
+ * account with no verified handle is not an account.
+ *
+ * The confirmation scales with what is at stake: two clicks to remove one of two
+ * handles (the money is provably untouched, the other handle is untouched), a
+ * typed handle when it is the last one and the account goes too.
  */
 export default function ConnectPanel({
   authError,
@@ -42,8 +55,14 @@ export default function ConnectPanel({
   /** `?merged=1` — two accounts were just joined into this one. */
   merged?: boolean;
 }) {
-  const { identity, error, signIn } = useIdentity();
+  const { identity, error, signIn, refresh } = useIdentity();
+  const router = useRouter();
   const [joining, setJoining] = useState(false);
+  /** Which row is asking to be disconnected, and what has been typed for it. */
+  const [leaving, setLeaving] = useState<ProviderKey | null>(null);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const message = error ?? describeAuthError(authError);
 
   /**
@@ -74,6 +93,42 @@ export default function ConnectPanel({
       await signIn(provider, "/profile", true);
     } catch {
       setJoining(false);
+    }
+  }
+
+  async function disconnect(key: ProviderKey, kind: number, last: boolean) {
+    setBusy(true);
+    setFailed(null);
+    try {
+      const res = await fetch("/api/account/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, confirm: last ? typed : undefined }),
+      });
+      const body = (await res.json()) as {
+        accountDeleted?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(body.error ?? "Could not disconnect.");
+
+      if (body.accountDeleted) {
+        // The session belongs to an account that no longer exists. A full
+        // document load is the only way to be sure nothing on screen is still
+        // holding its data.
+        window.location.replace("/app");
+        return;
+      }
+      setLeaving(null);
+      setTyped("");
+      // Two refreshes, and both are needed: the identity state for every panel
+      // on this page, and the router for the server-rendered pages that listed
+      // the card which just went with it.
+      refresh();
+      router.refresh();
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : "Could not disconnect.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -118,6 +173,19 @@ export default function ConnectPanel({
                     <CheckMark />
                     verified
                   </span>
+                  {/* Quiet, and last in the row. It is the one destructive thing
+                      in this section, so it does not get to look like the
+                      subject of it. */}
+                  <button
+                    className="btn btn-quiet btn-sm shrink-0 text-danger"
+                    onClick={() => {
+                      setLeaving(p.key);
+                      setTyped("");
+                      setFailed(null);
+                    }}
+                  >
+                    Disconnect
+                  </button>
                 </>
               ) : (
                 <>
@@ -170,6 +238,85 @@ export default function ConnectPanel({
         <p role="alert" className="text-sm text-danger">
           {message}
         </p>
+      )}
+
+      {/* The confirm, in place. What goes is spelled out before the button that
+          does it, and the last handle needs its name typed because that is the
+          case that ends the account. */}
+      {leaving !== null && mine && (
+        <div className="card border-danger/40 p-4 text-sm">
+          {(() => {
+            const v = mine[leaving];
+            if (!v) return null;
+            const last = (mine.github ? 1 : 0) + (mine.x ? 1 : 0) <= 1;
+            return (
+              <>
+                <p className="font-semibold">
+                  Disconnect{" "}
+                  <span className="mono">
+                    {kindUrlPrefix(v.kind)}
+                    {v.handle}
+                  </span>
+                  ?
+                </p>
+                <p className="mt-1 text-mute">
+                  Its card and payout address go with it, for good. Escrow is
+                  untouched — it belongs to the handle, so verifying it again
+                  makes the same money claimable again.
+                  {last && " This is your only handle, so the account goes too."}
+                </p>
+
+                {last && (
+                  <label className="mt-3 block">
+                    <span className="text-xs text-mute">
+                      Type <span className="mono">@{v.handle}</span> to confirm
+                    </span>
+                    <input
+                      className="field mono mt-1"
+                      value={typed}
+                      onChange={(e) => setTyped(e.target.value)}
+                      placeholder={`@${v.handle}`}
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                  </label>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    className="btn btn-danger btn-sm"
+                    disabled={
+                      busy ||
+                      (last &&
+                        typed.trim().replace(/^@/, "").toLowerCase() !== v.handle)
+                    }
+                    onClick={() => void disconnect(leaving, v.kind, last)}
+                  >
+                    {busy && <span className="spinner" aria-hidden />}
+                    {busy ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                  <button
+                    className="btn btn-quiet btn-sm"
+                    disabled={busy}
+                    onClick={() => {
+                      setLeaving(null);
+                      setTyped("");
+                      setFailed(null);
+                    }}
+                  >
+                    Keep it
+                  </button>
+                </div>
+
+                {failed && (
+                  <p role="alert" className="mt-3 text-danger">
+                    {failed}
+                  </p>
+                )}
+              </>
+            );
+          })()}
+        </div>
       )}
 
       {/* What "Bring it here" will do, in one line, next to the button that
