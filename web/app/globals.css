@@ -122,6 +122,20 @@ body {
   border-radius: 0.375rem;
 }
 
+/* Except inside a composed control, where the group already draws one.
+   `.input-group` is a field, a unit label and a Max button behind a single
+   border; it rings the whole thing on `:focus-within`, so the input ringing
+   itself as well produced two green frames, the inner one stopping halfway
+   across the control at the edge of the text box.
+
+   Unlayered, and deliberately so. `.input-bare` sets `outline: none` already
+   and loses: it lives in `@layer components`, the rule above does not, and an
+   unlayered declaration beats a layered one whatever the specificity. A fix
+   inside the layer would look right and do nothing. */
+.input-group > :focus-visible {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
