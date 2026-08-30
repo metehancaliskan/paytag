@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import SendForm from "./SendForm";
 import PaymentList from "./PaymentList";
@@ -11,7 +10,7 @@ import {
   type Payment,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import { slugOf, type IdentityKind } from "@/lib/identity";
+import { type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits } from "@/lib/format";
 import { DEFAULT_TOKEN, tokenByContractId } from "@/lib/config";
 
@@ -71,13 +70,7 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
   const otherAssets = pending.filter(
     (p) => tokenByContractId(p.token)?.key !== headlineAsset.key,
   );
-  // Claimable, and in the headline asset — the figure sits next to the
-  // headline number, so it has to be the same unit.
-  const claimable = inHeadline.filter(
-    (p) => ledger !== null && p.expiryLedger > ledger,
-  );
   const total = inHeadline.reduce((acc, p) => acc + p.amount, 0n);
-  const claimableTotal = claimable.reduce((acc, p) => acc + p.amount, 0n);
 
   return (
     <div className="space-y-6">
@@ -134,27 +127,6 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
             </>
           )}
         </p>
-
-        {claimable.length > 0 && (
-          <p className="mt-3 text-sm text-dim">
-            <span
-              className="num font-semibold text-accent-text"
-              title={`${fromUnits(claimableTotal)} ${headlineAsset.symbol}`}
-            >
-              {displayUnits(claimableTotal)} {headlineAsset.symbol}
-            </span>{" "}
-            claimable ·{" "}
-            {/* The kind travels with the handle. The same name can be a
-                GitHub account and somebody else's X account, so a claim link
-                that carries only the name points at an ambiguous thing. */}
-            <Link
-              className="link"
-              href={`/claim?on=${slugOf(kind)}&handle=${handle}`}
-            >
-              Is this you?
-            </Link>
-          </p>
-        )}
 
         {loadError && (
           <p role="alert" className="mt-3 text-sm text-danger">
