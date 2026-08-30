@@ -209,9 +209,14 @@ export default function MyCards({ empty }: { empty: string }) {
               >
                 Edit
               </Link>
+              {/* The same red-on-quiet as Disconnect in ConnectPanel, and the
+                  same reasoning: destructive enough to be marked, not
+                  destructive enough to be filled. The one filled red in the
+                  product belongs to ending an account (globals.css), and
+                  spending it here would teach the reader to stop reading it. */}
               <button
                 type="button"
-                className="btn btn-quiet btn-sm"
+                className="btn btn-quiet btn-sm text-danger"
                 aria-expanded={leaving === identityId}
                 onClick={() => {
                   setLeaving(leaving === identityId ? null : identityId);
