@@ -177,7 +177,7 @@ export default function ConnectPanel({
                       in this section, so it does not get to look like the
                       subject of it. */}
                   <button
-                    className="btn btn-quiet btn-sm shrink-0 text-danger"
+                    className="btn btn-danger-quiet btn-sm shrink-0"
                     onClick={() => {
                       setLeaving(p.key);
                       setTyped("");

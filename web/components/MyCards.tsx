@@ -216,7 +216,7 @@ export default function MyCards({ empty }: { empty: string }) {
                   spending it here would teach the reader to stop reading it. */}
               <button
                 type="button"
-                className="btn btn-quiet btn-sm text-danger"
+                className="btn btn-danger-quiet btn-sm"
                 aria-expanded={leaving === identityId}
                 onClick={() => {
                   setLeaving(leaving === identityId ? null : identityId);

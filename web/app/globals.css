@@ -361,6 +361,30 @@ body {
     color: var(--text);
   }
 
+  /* Quiet, but destructive. Disconnecting a handle and deleting a card are
+     both last in their row and neither is the subject of its section, so
+     neither gets a fill — but a reader scanning a row of three controls should
+     be able to see which one takes something away without reading it.
+
+     A named variant rather than `btn-quiet text-danger`, for two reasons. A
+     utility and a component class have the SAME specificity, so which one wins
+     comes down to layer order — the kind of thing that works until a build
+     changes and then quietly stops. And `.btn-quiet:hover` sets `color`, which
+     means the utility version lost its red at exactly the moment the pointer
+     was on it, which is the moment it most needed to be red. Both are fixed by
+     the variant owning its own hover. */
+  .btn-danger-quiet {
+    background: transparent;
+    color: var(--danger);
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .btn-danger-quiet:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+
   /* Refund pulls money back out of escrow — a caution, not a destruction. */
   .btn-warn {
     border: 1px solid var(--warn-line);

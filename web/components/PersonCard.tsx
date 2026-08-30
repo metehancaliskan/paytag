@@ -21,6 +21,16 @@ const TIPS = [5, 10, 25] as const;
  * The same component renders the live preview in the card editor, which is the
  * point: what the author sees while typing is the row other people will see,
  * not an approximation of it.
+ *
+ * EVERY FIELD A PERSON WROTE BREAKS. The headline and the summary are the only
+ * text on this page whose shape nobody here controls, and the shape that breaks
+ * a card is not a long sentence — a browser wraps those at the spaces — it is
+ * one long unbroken run of characters with no space in it. Without
+ * `break-words` such a run refuses to wrap and simply draws past the card's
+ * border, over whatever is beside it. `truncate` is the answer where a single
+ * line is all there is room for (the name, the handle); where the whole text is
+ * meant to be read, breaking is the answer, because clipping a card's own
+ * headline would hide what the card is for.
  */
 export default function PersonCardView({
   card,
@@ -61,11 +71,13 @@ export default function PersonCardView({
       </div>
 
       {card.headline && (
-        <p className="mt-3 font-medium leading-snug">{card.headline}</p>
+        <p className="mt-3 break-words font-medium leading-snug">
+          {card.headline}
+        </p>
       )}
 
       {card.summary && (
-        <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-mute">
+        <p className="mt-1.5 line-clamp-3 break-words text-sm leading-relaxed text-mute">
           {card.summary}
         </p>
       )}
@@ -157,11 +169,13 @@ export function PersonCardDetail({ card }: { card: PersonCard }) {
       </div>
 
       {card.headline && (
-        <h2 className="mt-3 text-lg font-bold leading-snug">{card.headline}</h2>
+        <h2 className="mt-3 break-words text-lg font-bold leading-snug">
+          {card.headline}
+        </h2>
       )}
 
       {card.summary && (
-        <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-dim">
+        <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-dim">
           {card.summary}
         </p>
       )}
@@ -181,7 +195,7 @@ export function PersonCardDetail({ card }: { card: PersonCard }) {
           {card.links.map((l) => (
             <li key={l.url}>
               <a
-                className="link"
+                className="link break-all"
                 href={l.url}
                 target="_blank"
                 rel="noreferrer nofollow"
