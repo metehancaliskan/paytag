@@ -43,27 +43,72 @@ for the rest of the visit.
 server-side at claim time, once per claim, on the freshest answer available —
 that one is about who gets money, and a cached id is the wrong trade there.
 
-## X: metered, so the send page does not call it
+## X: metered, so the send page meters it
 
-At $0.010 per lookup, an X existence check on an **anonymous** page is a hole
+At $0.010 per lookup, an existence check on an **anonymous** page is a hole
 somebody can pour our money through:
 
-| Traffic | Cost if we checked X on every press |
+| Traffic | Cost, unmetered |
 | --- | --- |
 | 100 checks / month (demo scale) | $1 |
 | 1,000 checks / month | $10 |
 | 10,000 checks / month | $100 |
 | a script at 1 request/second | **$36/hour, $864/day** |
 
-The last row is the whole argument. The endpoint would be reachable by anyone
-with `curl` and no account, and each call spends real credit. Rate limiting turns
-an uncapped bill into a capped one, but it does not turn an anonymous metered
-endpoint into a good idea.
+The last row is the whole argument, and it is why this check is not simply the
+GitHub one with a different URL. It cannot run in the browser (X will only
+answer a request carrying an app-only bearer token), the caller does not have to
+have an account (`/send` needs a wallet and nothing else, by design), and every
+answer draws on a credit balance with no free allowance.
 
-So the X section of `/send` makes **no API call**. It says plainly that we cannot
-confirm the account and links the profile so the reader checks with their own
-eyes. That is honest — an unchecked handle presented as checked would be worse
-than no check — and it costs nothing.
+So `/api/x/lookup` exists, and four gates stand in front of it. The first three
+are free; only a request that clears all of them spends a cent.
+
+| # | Gate | Where | What it stops |
+| --- | --- | --- | --- |
+| 1 | A connected wallet, checksum-valid | `app/api/x/lookup/route.ts` | `curl` in a loop |
+| 2 | 30-day cache, per handle | `x_profiles` | paying twice for one question |
+| 3 | 50 lookups per 3 hours, per IP **and** per wallet | `x_lookup_claim` | one caller going haywire |
+| 4 | 1,000 paid lookups per calendar month, whole deployment | `x_lookup_claim` | the bill |
+
+**Gate 1 is a claim, not a proof, and the code says so.** Nothing checks that
+the caller holds the key to that address, because doing so would mean a
+signature prompt before a spelling check and nobody would sit through it. What
+it buys is that an attacker has to produce well-formed, checksum-valid Stellar
+addresses and rotate them to get fresh budget. That is a speed bump, which is
+why it is one gate of four rather than the only one. A sign-in wall would be
+stronger and was the wrong trade: it would put the check out of reach of exactly
+the person it is for — the stranger sending money to a handle for the first
+time.
+
+**Gate 2 is what makes it cheap.** Whether an X account exists changes about
+once in that account's lifetime. Both answers are cached, deliberately: a name
+nobody holds is the answer that refuses a send, and re-asking it every time is
+how one nonexistent handle in a loop drains a budget.
+
+**Gate 4 is what makes it safe.** Gate 3 sounds tight until it is multiplied
+out — 50 per window, eight windows a day, thirty days is 12,000 lookups, $120,
+from one caller. A per-caller limit stops a person. Only a ceiling stops a bill.
+It is `X_LOOKUP_MONTHLY_CAP`, defaulting to the 1,000 in `web/lib/config.ts`.
+
+**What the reader sees when a gate closes.** Not an error: the same sentence the
+page showed before this endpoint existed — we cannot confirm this account, here
+is the profile, look for yourself — plus the avatar, which is free. The worst
+case of the metered feature is the state the page was already in. That is the
+property that makes it switchable off at any time: empty `X_API_BEARER` and the
+check is simply gone, with nothing broken.
+
+**One row per cent.** `x_lookups` records only *paid* lookups, cache hits
+excluded, and the row is written **before** the call to X — the same discipline
+`claim_nonces` follows for the verifier (SPEC §4.6). A crash overcounts by one
+rather than losing the record of a spend. Count the rows in a month and you have
+the bill.
+
+**The meter cannot become a surveillance log.** The IP and the wallet reach the
+table only as `sha256(salt ‖ value)`, with the salt in the environment. The
+counting needs to tell two callers apart; it does not need to know who they are,
+and without a salt the digest of an IP address would be reversible in an
+afternoon.
 
 ### The profile picture is a separate question, and it is free
 
@@ -89,22 +134,6 @@ If unavatar disappears or throttles, every X avatar becomes initials and nothing
 else changes. That is the whole blast radius, which is why a third party is
 acceptable here and would not be in the claim path.
 
-### What it would take to turn the X check on
-
-If it is ever wanted, these four together, not any one of them alone:
-
-1. **Server side only.** A route handler, so the credential stays out of the
-   browser and the spend is measurable in one place.
-2. **Signed in.** A cost-bearing call behind `getUser()`. Anonymous visitors
-   cannot spend our credits.
-3. **Cached by handle for ~30 days.** An X account existing is a fact that
-   almost never changes; repeat lookups of the same name should cost nothing.
-   At realistic scale this is what makes it cheap: 200 sends/month with ~60%
-   distinct handles is ~$1.20/month.
-4. **A hard monthly cap** in the route, counted in the database — at the cap the
-   check degrades to the honest "cannot confirm" text rather than failing the
-   page. A ceiling we choose beats a bill we discover.
-
 ### One X cost we already pay
 
 Every X sign-in makes one request for the authenticated user's own profile —
@@ -121,13 +150,16 @@ product. (GitHub sign-in has no equivalent charge.)
 | `latestLedger()`, balances, escrow lists | Soroban RPC | $0 |
 | the send transaction itself | Stellar network fee | ~0.00001 XLM |
 | XLM/USD rate | `/api/price`, cached server-side | $0 |
+| "Does this X account exist?" | `/api/x/lookup` | **$0.010**, and the only line here that is not free |
 
 The most useful line in the check — whether the recipient can claim today or the
 money will sit in escrow until somebody verifies — comes from our own database
-and costs nothing. Worth remembering when weighing the metered one: the
+and costs nothing. Worth keeping in proportion next to the metered one: the
 expensive call answers "does this account exist", which the reader can also
 answer by clicking the link; the free call answers "will this money move", which
-they cannot.
+they cannot. That ordering is why the X check degrades quietly instead of
+failing loudly — losing it costs the page its second-best line, not its best
+one.
 
 ## Sources
 

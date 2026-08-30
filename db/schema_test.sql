@@ -2,12 +2,19 @@
 -- Paytag — schema behaviour test
 --
 -- Shows not merely that schema.sql "works", but that IT REJECTS THE RIGHT
--- THINGS. Nine negative cases, each one corresponding to an attack scenario,
--- plus one retention case that has to keep something rather than refuse it.
+-- THINGS. Ten negative cases, each one corresponding to an attack scenario,
+-- plus two retention cases that have to keep something rather than refuse it.
 -- The whole thing ends in `rollback`; it never touches production data.
 --
+-- Cases 1-9 are constraints, so they hold against anyone, this script included.
+-- Case 10 is not: nothing about the shape of `cards` stops a stranger deleting
+-- your card, and `cards_delete_own` is the entire protection. Row level
+-- security does not apply to the owner of the database, so that case has to
+-- put the session into the `authenticated` role first and hand it a subject
+-- claim — otherwise it would pass while protecting nothing.
+--
 -- Running it, either way — plain SQL only, no psql meta-commands:
---   Supabase:  SQL Editor -> paste -> Run. A green "All nine rejection cases
+--   Supabase:  SQL Editor -> paste -> Run. A green "All ten rejection cases
 --              passed" row means every case behaved.
 --   Local:     psql -f db/schema.sql && psql -f db/schema_test.sql
 --
@@ -177,9 +184,83 @@ insert into public.cards (identity_id, profile_id, role, headline, summary, ecos
 do $$ begin raise notice '=== the public_cards view ==='; end $$;
 select kind, handle, headline, linked_identities from public.public_cards order by kind;
 
+-- A payout address on the same identity, so the next case can show that
+-- deleting a card leaves it standing. That is the promise the confirmation in
+-- Settings makes to the reader, and this is where it is actually checked.
+insert into public.payout_prefs (identity_id, profile_id, address) values
+  ('aaaaaaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',
+   'GDIPFNUNDF4COU5J3PJ7MKRXXSDFZ3EEDAVX34U2GDHXTPNNG4L76LPV');
+
+-- 10. Deleting somebody else's card.
+--
+--     Unlike every case above it, this one has no constraint behind it: the
+--     statement is perfectly well formed and the table would take it. What
+--     refuses it is `cards_delete_own`, and a policy only exists for a session
+--     that is subject to it — which is why the role is switched here. Run this
+--     block without the two SET LOCALs and it passes while proving nothing,
+--     because the database owner bypasses row level security.
+insert into auth.users (id) values ('33333333-3333-3333-3333-333333333333');
+insert into public.profiles (id, display_name) values
+  ('33333333-3333-3333-3333-333333333333', 'A Stranger');
+
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333"}';
+
+do $$
+declare removed integer;
+begin
+  delete from public.cards
+   where identity_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  get diagnostics removed = row_count;
+
+  -- No exception is raised: a delete blocked by row level security simply
+  -- matches nothing. Zero rows IS the refusal, and it is the only signal
+  -- there is, which is exactly why this needs its own case.
+  if removed <> 0 then
+    raise exception 'FAILED: a stranger deleted somebody else''s card';
+  end if;
+  raise notice '✅ a stranger could not delete somebody else''s card';
+end $$;
+
+-- Retention, again: the owner deleting their own card must take the card and
+-- nothing else. The handle stays verified and the payout address stays set —
+-- if either went with it, deleting a description would quietly cost somebody
+-- their claim route.
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111"}';
+
+do $$
+declare removed integer;
+begin
+  delete from public.cards
+   where identity_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  get diagnostics removed = row_count;
+
+  if removed <> 1 then
+    raise exception 'FAILED: the owner could not delete their own card';
+  end if;
+  if not exists (select 1 from public.identities
+                  where id = 'aaaaaaaa-0000-0000-0000-000000000001') then
+    raise exception 'FAILED: deleting a card took the verified identity with it';
+  end if;
+  if not exists (select 1 from public.payout_prefs
+                  where identity_id = 'aaaaaaaa-0000-0000-0000-000000000001') then
+    raise exception 'FAILED: deleting a card took the payout address with it';
+  end if;
+  -- And only that one card: the other handle's card is a separate row and a
+  -- separate decision.
+  if not exists (select 1 from public.cards
+                  where identity_id = 'aaaaaaaa-0000-0000-0000-000000000002') then
+    raise exception 'FAILED: deleting one card took the other one with it';
+  end if;
+
+  raise notice '✅ deleting a card leaves the identity, the payout address and the other card standing';
+end $$;
+
+reset role;
+
 rollback;
 
 -- Nothing above this line survived the rollback. This last row exists so the
 -- run has a visible verdict: any failed case raises an exception and aborts the
 -- script, so reaching this statement at all is the pass condition.
-select 'All nine rejection cases passed. Nothing was left behind.' as result;
+select 'All ten rejection cases passed. Nothing was left behind.' as result;

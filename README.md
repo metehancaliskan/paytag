@@ -70,7 +70,8 @@ db/
   schema_test.sql Behavioral test for the schema — nine negative cases, one retention case
   migration-001-roles.sql    Adds cards.role (shiller | dev) and the directory view
   migration-002-account.sql  Adds payout_prefs; keeps nonce records past account deletion
-  catch-up.sql    Both migrations in one paste, for a project created before them
+  migration-003-x-lookup.sql Adds the X handle check's cache and its spend meter
+  catch-up.sql    Every migration in one paste, for a project created before them
 docs/
   PLAN.md         Phase-by-phase build plan, test criteria at every step
   SPEC.md         Technical spec + data model (Phase 1)
@@ -91,7 +92,7 @@ scripts/
 ```bash
 ./scripts/setup-mac.sh        # Rust + wasm target + stellar-cli + testnet identity
 cd contracts && cargo test    # contract tests — 50 of them
-cd web && pnpm install && pnpm test  # parity + unit tests — 57 of them
+cd web && pnpm install && pnpm test  # parity + unit tests — 83 of them
 cd web && pnpm dev                   # the demo UI on http://localhost:3000
 ```
 

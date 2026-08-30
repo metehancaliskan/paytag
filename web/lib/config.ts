@@ -162,6 +162,28 @@ export const SECONDS_PER_LEDGER = 5;
 export const CLAIM_AUTH_LEDGERS = 120;
 
 /**
+ * The X handle check, and the three numbers that bound what it can cost.
+ *
+ * They are constants rather than environment reads because they are not
+ * secrets and because the documented figure and the running figure should not
+ * be able to drift apart — docs/API-COSTS.md quotes these. The one exception is
+ * the monthly cap, which `lib/x.ts` will take from `X_LOOKUP_MONTHLY_CAP` when
+ * it is set: the right ceiling depends on traffic nobody has seen yet, and
+ * raising it should not need a deploy.
+ *
+ * Why the cap is the load-bearing one. Fifty lookups per caller per three hours
+ * sounds tight until it is multiplied out: eight windows a day, thirty days,
+ * and one caller alone reaches twelve thousand lookups — $120 at $0.010 each.
+ * A per-caller limit stops one person going haywire. Only a global ceiling
+ * stops the bill.
+ */
+export const X_LOOKUP_PER_CALLER = 50;
+export const X_LOOKUP_WINDOW_HOURS = 3;
+export const X_LOOKUP_CACHE_DAYS = 30;
+/** 1,000 lookups ≈ $10 a month at X's $0.010 per user read. */
+export const X_LOOKUP_MONTHLY_CAP = 1_000;
+
+/**
  * How long a fetched XLM price is considered current, in seconds.
  *
  * The rate is decoration, not a settlement price: the escrow holds XLM, and

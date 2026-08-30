@@ -6,7 +6,13 @@ import Avatar from "./Avatar";
 import SendForm from "./SendForm";
 import { avatarUrl } from "@/lib/cards";
 import { browserSupabase } from "@/lib/supabase/client";
-import { lookupGithub, type GithubProfile } from "@/lib/github";
+import {
+  lookupGithub,
+  type GithubLookup,
+  type GithubProfile,
+} from "@/lib/github";
+import { lookupXHandle, type XAnswer } from "@/lib/x-client";
+import { useWallet } from "./WalletProvider";
 import { latestLedger } from "@/lib/contract";
 import {
   KIND,
@@ -47,14 +53,18 @@ import {
  *             own IP. $0 at any traffic level, and it cannot be exhausted by
  *             other people's traffic. Repeat presses on one handle are served
  *             from the per-tab cache in lib/github.ts.
- *   X       → no API call, and that is a costed decision. X charges $0.010 per
- *             user lookup against our credit balance, with no free allowance, so
- *             an existence check on an anonymous page is a $36-an-hour hole for
- *             anybody with curl. What the reader gets instead is the profile
- *             picture (lib/cards.ts — a free third-party avatar URL loaded by
- *             their own browser) and a link to the profile. A face they
- *             recognise is a better check than a sentence saying we could not
- *             make one, and no photo at all is itself a signal.
+ *   X       → /api/x/lookup, OUR server, because X will only answer a request
+ *             carrying an app-only token and it bills us $0.010 for doing so.
+ *             That price is why the endpoint is built the way it is rather than
+ *             mirrored off the GitHub path: a metered existence check reachable
+ *             by anyone with curl is a $36-an-hour hole. Four gates stand in
+ *             front of it — a connected wallet, a per-caller window, a
+ *             thirty-day cache and a monthly ceiling — and any of them being
+ *             hit degrades to `unavailable`, which prints what this page
+ *             printed before the endpoint existed. The profile picture
+ *             (lib/cards.ts, a free third-party URL loaded by the reader's own
+ *             browser) and the link to the profile carry it in that case, and a
+ *             missing photo is itself a signal.
  *   Paytag  → our own `identities` table, which is world readable. Free, and the
  *             most useful line of the three: it says whether this handle can
  *             claim today or whether the money will sit until somebody verifies.
@@ -68,8 +78,12 @@ type Checked = {
   identityHex: string;
   /** GitHub only. */
   profile: GithubProfile | null;
+  /** X only: the name on the account, when X told us one. */
+  xDisplayName: string | null;
   /** True when we asked and could not get an answer. */
   unreachable: boolean;
+  /** X only: does this deployment offer the paid check at all? */
+  xCheckOffered: boolean;
   /** Has somebody verified this handle on Paytag? */
   verified: boolean | null;
   ledger: number | null;
@@ -77,6 +91,10 @@ type Checked = {
 
 export default function SendTo({ kind }: { kind: IdentityKind }) {
   const supabase = useMemo(() => browserSupabase(), []);
+  // The wallet is what buys an X lookup — see app/api/x/lookup/route.ts for why
+  // a connected address rather than an account, and what that is and is not
+  // worth. Nothing else on this component needs it; the send form has its own.
+  const { address } = useWallet();
   const [raw, setRaw] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -104,7 +122,7 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
       const [lookup, verified, ledger] = await Promise.all([
         kind === KIND.GithubUser
           ? lookupGithub(handle)
-          : Promise.resolve({ status: "unreachable" as const }),
+          : lookupXHandle(handle, address),
         (async () => {
           if (!supabase) return null;
           const { data, error } = await supabase
@@ -118,6 +136,10 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
         latestLedger().catch(() => null),
       ]);
 
+      // A definite "no such account" refuses, on either platform. This is the
+      // whole reason the check exists: money bound to a handle nobody holds is
+      // not lost, but it is locked up until the refund window opens, and the
+      // sender finds out a week later.
       if (lookup.status === "missing") {
         setProblem(
           `No ${label} account called ${handle}. Check the spelling — money sent to a handle nobody holds waits until the refund window opens.`,
@@ -125,11 +147,20 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
         return;
       }
 
+      // One `Promise.all` for two platforms means one variable holding two
+      // shapes. Splitting it here rather than reaching into `lookup` at each
+      // use keeps the platform test in one place — and this component's whole
+      // subject is that GitHub and X are not interchangeable.
+      const gh = kind === KIND.GithubUser ? (lookup as GithubLookup) : null;
+      const x = kind === KIND.XUser ? (lookup as XAnswer) : null;
+
       setChecked({
         handle,
         identityHex,
-        profile: lookup.status === "found" ? lookup.profile : null,
-        unreachable: kind === KIND.GithubUser && lookup.status === "unreachable",
+        profile: gh?.status === "found" ? gh.profile : null,
+        xDisplayName: x?.status === "found" ? x.displayName : null,
+        unreachable: lookup.status === "unreachable",
+        xCheckOffered: x?.configured === true,
         verified,
         ledger,
       });
@@ -207,7 +238,7 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
 
             <div className="min-w-0 flex-1">
               <p className="font-semibold">
-                {checked.profile?.name ?? checked.handle}
+                {checked.profile?.name ?? checked.xDisplayName ?? checked.handle}
               </p>
               <a
                 className="mono text-sm text-mute hover:text-text"
@@ -249,12 +280,23 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
                   links the profile. What replaced it is the picture: if the
                   account does not resolve, there is no photo, and the reader can
                   see that faster than they can read a sentence. */}
-              {checked.unreachable && (
-                <p className="mt-2 text-xs text-warn">
-                  GitHub would not answer, so this account is unconfirmed. Open
-                  the profile above before sending.
-                </p>
-              )}
+              {/* Only the one case that is actually unusual gets a line: we
+                  asked and got nothing back. On X that line is also suppressed
+                  when the deployment does not offer the paid check at all,
+                  because a warning that is always on screen is wallpaper, and
+                  this page used to carry exactly that. Not offering the check
+                  is the state the page was in before /api/x/lookup existed, and
+                  it says nothing new. */}
+              {checked.unreachable &&
+                (kind === KIND.GithubUser || checked.xCheckOffered) && (
+                  <p className="mt-2 text-xs text-warn">
+                    {kind === KIND.GithubUser
+                      ? "GitHub would not answer, so this account is unconfirmed. Open the profile above before sending."
+                      : address
+                        ? "We could not confirm this account with X. Open the profile above before sending."
+                        : "Connect a wallet and check again to confirm this account with X. Sending works either way."}
+                  </p>
+                )}
             </div>
 
             <Link
