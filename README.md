@@ -92,7 +92,7 @@ scripts/
 ```bash
 ./scripts/setup-mac.sh        # Rust + wasm target + stellar-cli + testnet identity
 cd contracts && cargo test    # contract tests — 50 of them
-cd web && pnpm install && pnpm test  # parity + unit tests — 83 of them
+cd web && pnpm install && pnpm test  # parity + unit tests — 149 of them
 cd web && pnpm dev                   # the demo UI on http://localhost:3000
 ```
 

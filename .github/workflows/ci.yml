@@ -82,12 +82,20 @@ jobs:
       # `lib/config.ts` throws on a missing variable by design, so the build
       # needs the public ones. No secret is used or needed here: nothing in a
       # production build reads VERIFIER_SECRET or the service role key.
+      #
+      # THE THREE `need()` CALLS IN lib/config.ts MUST ALL APPEAR BELOW. The
+      # variable that is easy to forget is XLM: it arrived with the native
+      # asset and this block was updated in the same commit, minus that one
+      # line, so the build threw on a variable nothing else in CI wanted.
+      # Missing one fails the build with a clear message, which is the design
+      # working; the fix is always to add it here, never to soften `need()`.
       - name: Build
         run: pnpm build
         env:
           NEXT_PUBLIC_STELLAR_NETWORK: testnet
           NEXT_PUBLIC_STELLAR_RPC_URL: https://soroban-testnet.stellar.org
           NEXT_PUBLIC_ESCROW_CONTRACT_ID: CDN2BQNGHWCC22IXLAKBAVIOL5ID4MTH4FNYISVEARWQ4HZ27ZA7OZ3B
+          NEXT_PUBLIC_XLM_SAC_ID: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
           NEXT_PUBLIC_USDC_SAC_ID: CBU7HRUSXSVPI7QHA73G67UDRQTKSEOICFHWOMWSPOZ2S3R3DIWUCPKI
 
       - name: The verifier CLI agrees with the spec

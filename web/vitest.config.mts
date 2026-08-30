@@ -28,8 +28,10 @@ export default defineConfig({
         "CDN2BQNGHWCC22IXLAKBAVIOL5ID4MTH4FNYISVEARWQ4HZ27ZA7OZ3B",
       NEXT_PUBLIC_USDC_SAC_ID:
         "CBU7HRUSXSVPI7QHA73G67UDRQTKSEOICFHWOMWSPOZ2S3R3DIWUCPKI",
-      // Placeholder only: no test reads the chain, and the real id comes from
-      // `stellar contract id asset --asset native --network testnet`.
+      // The real testnet native SAC, the same value CI builds with. No test
+      // reads the chain, so any non-empty value would do, but a wrong one here
+      // would be a wrong answer waiting for the first test that does.
+      // Derived with `stellar contract id asset --asset native --network testnet`.
       NEXT_PUBLIC_XLM_SAC_ID:
         "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
     },
