@@ -30,7 +30,7 @@ export default function SendPage() {
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Send</h1>
         <p className="mt-1.5 text-dim">
-          Check the account, then send. It waits in escrow until they claim it.
+          Check the account, then send. It waits until they claim it.
         </p>
       </header>
 

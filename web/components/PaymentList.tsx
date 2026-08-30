@@ -15,7 +15,7 @@ import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format
 import { explorerAccount, explorerTx, tokenByContractId } from "@/lib/config";
 
 const STATUS_LABEL: Record<number, { text: string; cls: string }> = {
-  [STATUS.Pending]: { text: "In escrow", cls: "badge badge-pending" },
+  [STATUS.Pending]: { text: "Waiting", cls: "badge badge-pending" },
   [STATUS.Claimed]: { text: "Claimed", cls: "badge badge-claimed" },
   [STATUS.Refunded]: { text: "Refunded", cls: "badge badge-refunded" },
 };
@@ -55,7 +55,7 @@ export default function PaymentList({
   if (payments.length === 0) {
     return (
       <div className="card p-6 text-center">
-        <p className="font-medium">Nothing in escrow yet</p>
+        <p className="font-medium">Nothing waiting yet</p>
         <p className="mt-1 text-sm text-mute">
           Be the first. They need no wallet for it to be waiting.
         </p>

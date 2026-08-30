@@ -100,6 +100,26 @@ export const TOKENS: TokenConfig[] = [
 
 export const DEFAULT_TOKEN: TokenConfig = TOKENS[0];
 
+/**
+ * What the send form OFFERS, which is deliberately narrower than what the app
+ * can name.
+ *
+ * XLM only. An asset picker with two entries asks every sender a question that
+ * has one right answer for almost all of them, on the screen where a wrong
+ * answer costs the most: USDC cannot be held by a wallet that has not opened a
+ * trustline for it, so choosing it can leave the money sitting behind a wall
+ * the recipient has never heard of. XLM has no such wall.
+ *
+ * `TOKENS` still lists USDC, and that is the point of keeping the two apart.
+ * There are USDC payments on the deployed contract already; a payment list that
+ * forgot how to name an asset just because the form stopped offering it would
+ * print an amount with no unit beside it. We stop offering it; we do not stop
+ * understanding it.
+ */
+export const SENDABLE_TOKENS: TokenConfig[] = TOKENS.filter(
+  (t) => t.key === "XLM",
+);
+
 export function tokenByKey(key: TokenKey): TokenConfig {
   return TOKENS.find((t) => t.key === key) ?? DEFAULT_TOKEN;
 }

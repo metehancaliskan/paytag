@@ -260,9 +260,9 @@ export default function ConnectPanel({
                   ?
                 </p>
                 <p className="mt-1 text-mute">
-                  Its card and payout address go with it, for good. Escrow is
-                  untouched: it belongs to the handle, so verifying it again
-                  makes the same money claimable again.
+                  Its card and payout address go with it, for good. The money
+                  is untouched: it belongs to the handle, so verifying it again
+                  makes it claimable again.
                   {last && " This is your only handle, so the account goes too."}
                 </p>
 
@@ -323,7 +323,7 @@ export default function ConnectPanel({
           does it. Everything irreversible about it is in the second sentence. */}
       {taken && mine && (
         <p className="text-xs text-mute">
-          Its card and payout address come too, and the escrow is untouched: it
+          Its card and payout address come too, and the money is untouched: it
           belongs to the handle. That account&rsquo;s login is removed, so
           afterwards you sign in with{" "}
           <span className="mono">

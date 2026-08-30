@@ -49,7 +49,7 @@ export const ESCROW_ERRORS: Record<number, string> = {
   2: "The contract is not initialized yet (init has not been called).",
   3: "The amount cannot be zero or negative.",
   4: "That expiry ledger is already in the past.",
-  5: "That escrow window is longer than the contract allows (30 days maximum).",
+  5: "That claim window is longer than the contract allows (30 days maximum).",
   6: "No such payment.",
   7: "This payment has already been claimed or refunded.",
   8: "The claim window has not closed yet. No refund before expiry.",
@@ -146,13 +146,13 @@ export function describeEscrowError(err: unknown): string {
       return `${tokenSays} (token contract error #${code})`;
     }
     if (source === "escrow" && escrowSays) {
-      return `${escrowSays} (escrow error #${code})`;
+      return `${escrowSays} (payment contract error #${code})`;
     }
     // Neither contract could be identified in the message. Both readings are
     // shown rather than one picked at random — the same number means two
     // different things, and the difference decides where to look.
     if (escrowSays && tokenSays) {
-      return `Error #${code}. From the escrow that means: ${escrowSays} From the token contract it means: ${tokenSays}`;
+      return `Error #${code}. From the payment contract that means: ${escrowSays} From the token contract it means: ${tokenSays}`;
     }
     if (escrowSays) return `${escrowSays} (error #${code})`;
     if (tokenSays) return `${tokenSays} (error #${code})`;

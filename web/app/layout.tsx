@@ -7,7 +7,7 @@ import { IS_TESTNET } from "@/lib/config";
 export const metadata: Metadata = {
   title: "Paytag · pay a GitHub or X handle",
   description:
-    "Pay someone who has no wallet, knowing nothing but their GitHub or X username. It waits in a Soroban escrow until the owner of the handle verifies the account and withdraws it.",
+    "Pay someone who has no wallet, knowing nothing but their GitHub or X username. A Soroban contract holds it until the owner of the handle verifies the account and withdraws it.",
 };
 
 /**

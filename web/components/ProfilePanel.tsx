@@ -84,7 +84,7 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
       {/* ------------------------------------------------------- balance */}
       <div className="card p-5">
         <div className="flex items-baseline justify-between gap-3">
-          <span className="text-sm text-mute">Waiting in escrow</span>
+          <span className="text-sm text-mute">Waiting to be claimed</span>
           <button
             className="btn btn-quiet"
             onClick={refresh}

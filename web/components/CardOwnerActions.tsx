@@ -15,6 +15,15 @@ import { slugOf, type IdentityKind } from "@/lib/identity";
  * looking at the sentence you want to change, and the way to change it is on
  * another screen. The controls belong where the thing they act on is.
  *
+ * THEY LIVE IN A STRIP AT THE FOOT OF THE CARD, which is where the directory
+ * row already puts its tip buttons: a hairline, then the actions, safe one on
+ * the left and destructive one pushed to the far right. They were beside the
+ * badges first and it was wrong twice over. The card sits in a 20rem column, so
+ * the pair wrapped onto a line of its own and floated between the badges and
+ * the headline with nothing to belong to; and controls above a card's title
+ * read as a toolbar for the page rather than for the card. Underneath, after
+ * the text they act on, they are unmistakably about this card.
+ *
  * OWNERSHIP IS DECIDED IN THE BROWSER, and it has to be: /p/<kind>/<handle> is
  * a public page rendered on the server for everyone alike, and who is reading
  * it is a fact about the session, not about the URL. So this renders nothing at
@@ -58,25 +67,25 @@ export default function CardOwnerActions({
   }
 
   return (
-    <>
-      <div className="ml-auto flex items-center gap-2">
-        <Link className="btn btn-ghost btn-sm" href={editHref}>
-          Edit
-        </Link>
-        <button
-          type="button"
-          className="btn btn-danger-quiet btn-sm"
-          aria-expanded={confirming}
-          onClick={() => setConfirming((v) => !v)}
-        >
-          Delete
-        </button>
-      </div>
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+      <Link className="btn btn-ghost btn-sm" href={editHref}>
+        Edit
+      </Link>
+      {/* Pushed to the far end, away from Edit. The two are one slip apart
+          otherwise, and only one of them can be undone. */}
+      <button
+        type="button"
+        className="btn btn-danger-quiet btn-sm ml-auto"
+        aria-expanded={confirming}
+        onClick={() => setConfirming((v) => !v)}
+      >
+        Delete
+      </button>
 
-      {/* A sibling rather than a child, and `w-full` inside the header's
-          flex-wrap row: the confirmation needs the card's whole width to say
-          what survives, and squeezing it beside two buttons would cost it the
-          sentence that does the reassuring. */}
+      {/* `w-full` in this flex-wrap row drops the confirmation onto its own
+          line: it needs the card's whole width to say what survives, and
+          squeezing it beside two buttons would cost it the sentence that does
+          the reassuring. */}
       {confirming && (
         <DeleteCardConfirm
           identityId={mine.id}
@@ -92,6 +101,6 @@ export default function CardOwnerActions({
           }}
         />
       )}
-    </>
+    </div>
   );
 }

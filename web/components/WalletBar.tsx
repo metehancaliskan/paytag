@@ -236,7 +236,7 @@ export default function WalletBar() {
                   className="menu-item"
                   onClick={() => setOpen(false)}
                 >
-                  Claim your escrow
+                  Claim your money
                   <ChevronRight className="ml-auto shrink-0 text-mute" />
                 </Link>
               )}

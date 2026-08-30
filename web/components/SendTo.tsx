@@ -277,8 +277,8 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
                   </span>
                 ) : (
                   <span className="text-mute">
-                    Not verified on Paytag yet. The money waits in escrow until
-                    they prove the account is theirs.
+                    Not verified on Paytag yet. The money waits until they
+                    prove the account is theirs.
                   </span>
                 )}
               </p>

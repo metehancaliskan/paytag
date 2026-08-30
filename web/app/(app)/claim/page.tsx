@@ -26,8 +26,8 @@ export default async function ClaimPage({
     // list. Nothing here needs more than a reading measure.
     <div className="mx-auto max-w-2xl space-y-5">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Claim your escrow</h1>
-        <p className="mt-1.5 text-dim">Each handle holds its own escrow.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Claim your money</h1>
+        <p className="mt-1.5 text-dim">Each handle holds its own balance.</p>
       </header>
 
       <ClaimPanel

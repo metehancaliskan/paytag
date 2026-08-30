@@ -588,21 +588,25 @@ hold.
 
 ### 4.7 The dollar figure is not a price feed
 
-The send form takes an amount in dollars and deposits XLM, converted at a rate
-fetched server-side from a public price API (`GET /api/price`, cached for
-`PRICE_TTL_SECONDS`). Three properties of that number matter, and all three are
-stated on the screen rather than left to be discovered:
+The send form takes an amount **in XLM** and shows what it is worth in dollars
+underneath, at a rate fetched server-side from a public price API
+(`GET /api/price`, cached for `PRICE_TTL_SECONDS`).
+
+That direction was reversed on purpose. The form used to take dollars and derive
+the XLM, which put the sender's hands on the softer of the two numbers: XLM is
+what leaves the wallet, what the contract holds and what the recipient claims,
+while the dollar figure is an opinion about it. Properties of that number, all
+stated on screen rather than left to be discovered:
 
 - **Nothing on chain reads it.** No contract decision, no stored value and no
-  balance depends on the rate. It is a label on an input box.
-- **The escrow holds XLM.** Whoever claims receives the XLM amount, worth
-  whatever it is worth then. A dollar figure implies a stability the chain never
-  promised, so the form says outright that the amount is denominated in XLM, and
-  the converted figure is written with a `≈`.
-- **A missing rate degrades, it does not block.** If the price endpoint fails,
-  the field switches to accepting XLM directly and says why. Refusing to let
-  someone send money because a third-party price API is down would be the wrong
-  trade every time.
+  balance depends on the rate. It is a caption under an input box.
+- **The contract holds XLM.** Whoever claims receives the XLM amount, worth
+  whatever it is worth then. The estimate is written with `≈` and the word
+  "about", and it never appears without them.
+- **A missing rate now costs nothing.** The estimate disappears and the field
+  keeps working, because the field never needed the rate. The old form had to
+  switch modes and explain itself when the price endpoint failed; there is no
+  mode to switch to any more.
 - **The provider is not named.** Neither the response nor the interface says
   which service was asked. An earlier version printed it, on the theory that
   attribution is honesty; the opposite turned out to be true — a named source
@@ -615,8 +619,12 @@ a scaled integer once and every step after that is exact, rounding toward zero
 so a converted amount can never exceed the balance it was derived from. Tested
 in `lib/price.test.ts`.
 
-An issued asset that is dollar-pegged by construction (USDC) skips the
-conversion entirely — one unit is one dollar, and no rate is involved.
+An issued asset that is dollar-pegged by construction (USDC) needs no estimate at
+all, one unit being one dollar. It is no longer offered on the send screen
+(`SENDABLE_TOKENS` in `web/lib/config.ts`): a trustline is a wall the recipient
+may never have heard of, and an asset picker invites a sender to put money
+behind it. The app still *names* USDC wherever it appears in payment history,
+because deposits in it exist on the deployed contract.
 
 ## 5. Red team — how I would exploit this design
 

@@ -409,7 +409,7 @@ export default function CardEditor({
                     {mine[0].handle}
                   </span>{" "}
                   stays exactly as it is. Each handle keeps its own card and its
-                  own escrow.
+                  own balance.
                 </>
               ) : (
                 <>

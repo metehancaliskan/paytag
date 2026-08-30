@@ -30,7 +30,7 @@ import Logo from "@/components/Logo";
  *  wrong. */
 const STEPS = [
   "Send to a handle",
-  "It waits in escrow",
+  "It waits for them",
   "They verify and withdraw",
 ];
 
@@ -53,7 +53,7 @@ export default function Landing() {
 
       <main id="main" className="mx-auto w-full max-w-4xl flex-1 px-5">
         <section className="pt-14 pb-10 sm:pt-20 sm:pb-14">
-          <p className="menu-label">Stellar · Soroban escrow</p>
+          <p className="menu-label">Stellar · Soroban</p>
 
           <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl">
             Pay a GitHub or X handle.

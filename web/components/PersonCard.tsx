@@ -7,14 +7,18 @@ import { GithubMark, XMark } from "./icons";
 import CardOwnerActions from "./CardOwnerActions";
 
 /**
- * Quick-tip amounts, in dollars.
+ * Quick-tip amounts, in XLM.
  *
  * Three presets and nothing else: the point of a directory row is to turn
  * "I like this person's work" into a signed transaction without a detour, and a
  * grid of ten choices is a decision, not a shortcut. Each one lands on the pay
  * page with the field already filled, so what is left is connect and sign.
+ *
+ * In XLM because the field they fill is in XLM. They were dollar figures while
+ * the field was, and a button that says $10 landing in a field that reads 10
+ * XLM is not a rounding difference, it is a different amount of money.
  */
-const TIPS = [5, 10, 25] as const;
+const TIPS = [25, 50, 100] as const;
 
 /**
  * One person in the directory.
@@ -108,10 +112,10 @@ export default function PersonCardView({
     return (
       <div className="card p-4">
         {body}
-        <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
           {TIPS.map((t) => (
             <span key={t} className="btn btn-ghost btn-sm">
-              ${t}
+              {t} XLM
             </span>
           ))}
           <span className="btn btn-quiet btn-sm ml-auto">Open →</span>
@@ -137,15 +141,15 @@ export default function PersonCardView({
         {body}
       </Link>
 
-      <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
         {TIPS.map((t) => (
           <Link
             key={t}
             href={`${cardPath(card)}?amount=${t}`}
             className="btn btn-ghost btn-sm"
-            title={`Send $${t} to ${kindUrlPrefix(card.kind)}${card.handle}`}
+            title={`Send ${t} XLM to ${kindUrlPrefix(card.kind)}${card.handle}`}
           >
-            ${t}
+            {t} XLM
           </Link>
         ))}
         <Link
@@ -164,9 +168,9 @@ export default function PersonCardView({
  * no clamping. The directory row is a teaser; this is the thing itself.
  *
  * And for the person whose card it is, the place it is edited from. Settings
- * used to be the only way in, which made a round trip out of a typo. The badges
- * row carries the controls because it is the one line of the card that is about
- * the card rather than in it; `CardOwnerActions` draws nothing for anybody else.
+ * used to be the only way in, which made a round trip out of a typo. The
+ * controls sit in a strip at the foot of the card, under the text they act on;
+ * `CardOwnerActions` draws nothing at all for anybody else.
  */
 export function PersonCardDetail({ card }: { card: PersonCard }) {
   // From the platform, not from the stored column. The role IS the platform
@@ -180,7 +184,6 @@ export function PersonCardDetail({ card }: { card: PersonCard }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="badge badge-claimed">verified</span>
         <span className="badge">{role.label}</span>
-        <CardOwnerActions kind={card.kind} handle={card.handle} />
       </div>
 
       {card.headline && (
@@ -228,9 +231,11 @@ export function PersonCardDetail({ card }: { card: PersonCard }) {
           {card.linked
             .map((l) => `${kindUrlPrefix(l.kind)}${l.handle}`)
             .join(", ")}
-          . Each identity holds its own escrow.
+          . Each identity holds its own balance.
         </p>
       )}
+
+      <CardOwnerActions kind={card.kind} handle={card.handle} />
     </div>
   );
 }

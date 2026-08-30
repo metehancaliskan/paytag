@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!r) return { title: "Paytag" };
   return {
     title: `@${r.handle} · ${kindLabel(r.kind)} · Paytag`,
-    description: `Pay ${kindUrlPrefix(r.kind)}${r.handle}. It waits in escrow until the owner of the account verifies it and claims it.`,
+    description: `Pay ${kindUrlPrefix(r.kind)}${r.handle}. It waits until the owner of the account verifies it and claims it.`,
   };
 }
 
@@ -187,26 +187,19 @@ function IdentityCard({
         </dl>
       )}
 
-      {/* Both of these used to be paragraphs. The fact each one carries is one
-          clause long; the rest was reassurance nobody asked for. */}
+      {/* Only when we asked and got nothing back. It used to be a paragraph;
+          the fact it carries is one clause long, and the rest was reassurance
+          nobody asked for.
+
+          There is no X equivalent, deliberately. X pages carried this line
+          permanently, because there is no free preview to fail: it said the
+          same thing on every X page forever, which makes it wallpaper rather
+          than information. What it asked for is already on the card anyway,
+          since the handle above is a link to the profile. A line that is always
+          on screen tells a reader nothing about the page they are on. */}
       {!profile && kind === KIND.GithubUser && (
         <p className="mt-4 text-sm text-mute">
           No GitHub preview. You can still send.
-        </p>
-      )}
-
-      {kind === KIND.XUser && (
-        <p className="mt-4 text-sm text-mute">
-          No X preview, so{" "}
-          <a
-            className="link"
-            href={profileUrl(kind, handle)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            check the account
-          </a>{" "}
-          before paying.
         </p>
       )}
     </div>

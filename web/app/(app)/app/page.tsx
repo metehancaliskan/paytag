@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Dashboard · Paytag",
   description:
-    "Developers and community contributors in the Stellar ecosystem, each one payable by handle. The money waits in escrow until they withdraw it.",
+    "Developers and community contributors in the Stellar ecosystem, each one payable by handle. The money waits until they withdraw it.",
 };
 
 /** ?on=gh | x — which platform the handle lives on. */
@@ -57,8 +57,8 @@ export default async function Dashboard({
           worry about: the money was never in the account. */}
       {deleted === "1" && (
         <p className="card p-4 text-sm">
-          Account deleted. Escrow belongs to the handle, so verifying it again
-          brings it back.
+          Account deleted. The money belongs to the handle, so verifying it
+          again brings it back.
         </p>
       )}
 

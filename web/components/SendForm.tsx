@@ -20,12 +20,13 @@ import {
   fromUnits,
   ledgerToApproxDate,
   toUnits,
+  usdGlance,
 } from "@/lib/format";
-import { centsToUnits, unitsToCents, usdToCents } from "@/lib/price";
+import { unitsToCents } from "@/lib/price";
 import {
   DEFAULT_TOKEN,
   EXPIRY_CHOICES,
-  TOKENS,
+  SENDABLE_TOKENS,
   explorerTx,
   tokenByKey,
   type TokenKey,
@@ -34,13 +35,19 @@ import {
 /**
  * The send form.
  *
- * The amount is typed in dollars and sent in XLM. That is a deliberate choice
- * with a cost, and the cost is stated on screen rather than buried: the escrow
- * holds XLM, so the dollar figure is today's rate and nothing more. Whoever
- * claims it receives the XLM amount, worth whatever it is worth by then.
+ * THE AMOUNT IS TYPED IN XLM, and the dollars are the estimate underneath. It
+ * was the other way round, and the reason for the swap is that the two figures
+ * are not equally true. XLM is what leaves the wallet, what the contract holds,
+ * and what the recipient claims; the dollar figure is one API's opinion of what
+ * that is worth this minute, and nothing on chain reads it. Typing the estimate
+ * and having the real number derived from it put the reader's hands on the
+ * softer of the two numbers, and made "$25" look like the promise, when the
+ * promise the chain actually keeps is the XLM.
  *
- * For a dollar-pegged asset like USDC the two are the same number, so the
- * conversion line disappears and no rate is needed at all.
+ * It also removes a failure mode rather than describing one: with no rate, the
+ * old form fell back to XLM entry and had to say so. Now there is nothing to
+ * fall back to. The estimate disappears and the field keeps working, because
+ * the field never needed the rate.
  */
 export default function SendForm({
   handle,
@@ -114,12 +121,12 @@ export default function SendForm({
       ? balanceOf.value
       : null;
 
-  // ------------------------------------------------------ dollars to units
+  // ---------------------------------------------------------- input to units
 
-  // A dollar-pegged asset needs no rate; XLM does. When the rate is missing the
-  // field switches to the token's own unit — degraded, still usable, and the
-  // label says which mode it is in rather than leaving the reader to guess.
-  const dollarMode = token.isDollarPegged || priceState.status === "ready";
+  // One path, and no rate in it. What the reader types is the asset's own unit,
+  // so the number that reaches `deposit` is a straight parse of the field: no
+  // conversion to get wrong, and nothing to do differently when the price
+  // endpoint is down.
   const rate =
     priceState.status === "ready" ? priceState.price.usdPerXlm : null;
 
@@ -128,13 +135,7 @@ export default function SendForm({
 
   if (amountInput.trim() !== "") {
     try {
-      if (token.isDollarPegged) {
-        units = toUnits(amountInput, token.decimals);
-      } else if (dollarMode && rate !== null) {
-        units = centsToUnits(usdToCents(amountInput), rate, token.decimals);
-      } else {
-        units = toUnits(amountInput, token.decimals);
-      }
+      units = toUnits(amountInput, token.decimals);
       if (units <= 0n) {
         problem = "The amount has to be greater than zero.";
       } else if (balance !== null && units > balance) {
@@ -150,22 +151,23 @@ export default function SendForm({
 
   const ready = units !== null && problem === null;
 
+  /** What the typed amount is worth today. Decoration, and it says so below. */
+  const worth =
+    rate !== null && units !== null && problem === null
+      ? usdGlance(unitsToCents(units, rate, token.decimals))
+      : null;
+
   const expiry = EXPIRY_CHOICES[choice];
   const refundableOn =
     ledger === null
       ? null
       : formatDate(ledgerToApproxDate(ledger + expiry.ledgers, ledger));
 
+  // The balance, exactly. It used to go out through the rate and back, which
+  // meant Max could not be the balance — only the nearest cent below it.
   function setMax() {
     if (balance === null) return;
-    if (token.isDollarPegged || rate === null) {
-      setAmountInput(fromUnits(balance, token.decimals));
-    } else {
-      // Converted down to whole cents, so the round trip back to units can only
-      // land at or below the balance — never a cent over it.
-      const cents = unitsToCents(balance, rate, token.decimals);
-      setAmountInput((Number(cents) / 100).toFixed(2));
-    }
+    setAmountInput(fromUnits(balance, token.decimals));
   }
 
   async function send() {
@@ -232,7 +234,7 @@ export default function SendForm({
               >
                 {displayUnits(sent.units, sent.decimals)}
               </span>{" "}
-              {sent.symbol} is in escrow for{" "}
+              {sent.symbol} is waiting for{" "}
               <span className="mono">
                 {kindUrlPrefix(kind)}
                 {handle}
@@ -275,7 +277,7 @@ export default function SendForm({
   return (
     <div className="card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-semibold">Put money in escrow</h2>
+        <h2 className="font-semibold">Put money aside</h2>
         {address && balance !== null && (
           <span
             className="num text-xs text-mute"
@@ -286,11 +288,11 @@ export default function SendForm({
         )}
       </div>
 
-      {TOKENS.length > 1 && (
+      {SENDABLE_TOKENS.length > 1 && (
         <div className="mt-4">
           <span className="label">Asset</span>
           <div className="segmented" role="group" aria-label="Asset">
-            {TOKENS.map((t) => (
+            {SENDABLE_TOKENS.map((t) => (
               <button
                 key={t.key}
                 type="button"
@@ -311,32 +313,25 @@ export default function SendForm({
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
           <label className="label" htmlFor={amountId}>
-            {dollarMode && !token.isDollarPegged
-              ? "Amount in dollars"
-              : `Amount in ${token.symbol}`}
+            Amount in {token.symbol}
           </label>
           <div
             className="input-group"
             aria-invalid={problem ? "true" : undefined}
           >
-            {dollarMode && !token.isDollarPegged && (
-              <span className="input-prefix">$</span>
-            )}
             <input
               id={amountId}
               className="input-bare num"
               inputMode="decimal"
               autoComplete="off"
-              placeholder="0.00"
+              placeholder="0"
               value={amountInput}
               onChange={(e) => setAmountInput(e.target.value)}
               disabled={busy !== null}
               aria-invalid={problem ? "true" : undefined}
               aria-describedby={problem ? problemId : undefined}
             />
-            {(!dollarMode || token.isDollarPegged) && (
-              <span className="input-suffix">{token.symbol}</span>
-            )}
+            <span className="input-suffix">{token.symbol}</span>
             {balance !== null && balance > 0n && (
               <button
                 type="button"
@@ -375,25 +370,18 @@ export default function SendForm({
         </div>
       </div>
 
-      {/* What will actually leave the wallet. Approximate on screen and exact
-          on hover: the conversion is an estimate, and where the provider of the
-          rate came from is not the reader's business. */}
-      {!token.isDollarPegged && (
+      {/* What the typed amount is worth, and never the other way round. The
+          approximately sign is doing real work: this number is an estimate, it
+          is not what gets sent, and it will not be what the recipient claims.
+
+          Nothing at all when there is no rate. The old form owed the reader a
+          sentence there, because losing the rate changed what the field meant;
+          now it changes nothing, and a line explaining that a decoration is
+          missing is worse than the missing decoration. */}
+      {!token.isDollarPegged && worth !== null && (
         <p className="mt-2 text-xs text-mute">
-          {priceState.status === "loading" && "…"}
-          {priceState.status === "unavailable" &&
-            "No rate right now. The amount above is in XLM."}
-          {priceState.status === "ready" && units !== null && !problem && (
-            <>
-              Sends{" "}
-              <span
-                className="num font-semibold text-dim"
-                title={`${fromUnits(units, token.decimals)} ${token.symbol}`}
-              >
-                ≈ {displayUnits(units, token.decimals)} {token.symbol}
-              </span>
-            </>
-          )}
+          Worth about{" "}
+          <span className="num font-semibold text-dim">{worth}</span> today
         </p>
       )}
 
@@ -437,15 +425,6 @@ export default function SendForm({
           {busy}
         </span>
       </div>
-
-      {/* The honest caveat, in one line. A dollar figure implies a promise the
-          chain never made, and that has to be said — it does not have to be
-          said in four. */}
-      {!token.isDollarPegged && priceState.status === "ready" && (
-        <p className="mt-3 text-xs text-mute">
-          The escrow holds XLM, not dollars.
-        </p>
-      )}
 
       {token.needsTrustline && (
         <p className="mt-3 text-xs text-mute">

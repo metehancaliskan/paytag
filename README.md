@@ -116,14 +116,19 @@ cannot be held by an account that has not opened a trustline for it first, and t
 standing in front of exactly the people this product is for — the ones who have never touched
 Stellar. Native XLM has no such wall.
 
-The amount is typed in dollars and sent in XLM, at a rate fetched from a public price API. That
-rate is display only: nothing on chain reads it, and the escrow holds XLM, so the recipient
-claims the XLM amount, worth whatever it is worth by then. The UI says so on the send screen
-rather than letting a dollar figure imply a promise the chain never made.
+**The amount is typed in XLM, and the dollar figure underneath is the estimate.** The two are not
+equally true: XLM is what leaves the wallet, what the contract holds, and what the recipient
+claims, while the dollar figure is one public API's opinion of what that is worth this minute,
+and nothing on chain reads it. Typing the estimate and deriving the real number from it put the
+sender's hands on the softer of the two figures. It also means a missing rate now costs nothing:
+the estimate disappears and the field keeps working, because the field never needed the rate.
 
-USDC stays available as an optional second asset (there is no official Circle USDC on testnet,
-so we issue our own from a test issuer and wrap it in a Stellar Asset Contract). Moving to
-mainnet USDC is a single address change.
+The send form offers **XLM only**. USDC remains defined, and the app still names it wherever it
+appears in payment history, because there are USDC deposits on the deployed contract; it is
+simply not offered to new senders. An issued asset cannot be held by a wallet that has not opened
+a trustline for it, so an asset picker on the send screen invites a choice that can strand the
+money behind a wall the recipient has never heard of. Re-offering it is one line in
+`web/lib/config.ts` (`SENDABLE_TOKENS`), and moving to mainnet USDC is a single address change.
 
 ## Out of scope (Instawards SOW)
 

@@ -8,7 +8,7 @@ import SignOutButton from "@/components/SignOutButton";
 export const metadata: Metadata = {
   title: "Settings · Paytag",
   description:
-    "Your verified handles, where your escrow pays out, your cards, and the way out.",
+    "Your verified handles, where a claim pays out, your cards, and the way out.",
 };
 
 /**

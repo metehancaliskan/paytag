@@ -69,7 +69,7 @@ export default function DeleteCardConfirm({
       </p>
       <p className="mt-1 text-mute">
         The text goes, for good. Your handle stays verified, your payout address
-        stays set, and escrow is untouched: money is bound to the handle on
+        stays set, and your money is untouched: it is bound to the handle on
         chain, not to this card. You can write a new one whenever you like.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
