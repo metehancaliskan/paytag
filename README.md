@@ -1,138 +1,164 @@
 # Paytag
 
-**Claimable payments to GitHub and X handles, escrowed on Soroban.**
+**Send money to a GitHub or X username, before that person has a wallet.**
 
-Pay `github.com/someone`, `owner/repo`, `@handle`, or a Paytag nickname — before
-that recipient has ever connected a Stellar wallet. Funds sit in a Soroban escrow contract
-tagged to the *identity*. The recipient proves ownership of the handle, links a wallet, and
-claims. Nobody claims? The sender refunds after expiry.
+You pay `github.com/torvalds` or `x.com/someone`. The money goes into a Soroban
+contract on Stellar, tagged with a hash of the handle rather than an address.
+The recipient turns up whenever they like, proves the account is theirs by
+signing in with it, connects a wallet, and takes the money. If nobody turns up,
+the sender takes it back once the claim window closes.
 
-> Status: **Phase 2 complete** — escrow contract deployed to testnet with deposit/claim/refund proven on chain. Phase 3 (GitHub OAuth + verifier) is written but has not yet been run against a real Supabase project — see [docs/SETUP-AUTH.md](docs/SETUP-AUTH.md). See [docs/PLAN.md](docs/PLAN.md).
+Live on Stellar testnet: **[paytag-six.vercel.app](https://paytag-six.vercel.app)**
 
-## Why
+| | |
+| --- | --- |
+| Contract | Rust, `soroban-sdk` 26, deployed to testnet with deposit, claim and refund proven on chain ([tx hashes](docs/evidence/tx-hashes.md)) |
+| App | Next.js 16, deployed on Vercel, GitHub and X sign-in working |
+| Tests | 61 contract tests, 149 web tests, all in CI |
+| Money | Testnet only. Nothing here is worth anything. |
 
-Stellar's payment rails are strong, but to pay a developer, a creator, or an open source
-project you first have to know their wallet address. That slows down donations, bounty
-payouts, and contributor rewards. Paytag removes that step.
+## The problem
 
-## Architecture
+Stellar moves money well, but paying a developer or a creator means knowing
+their wallet address first. Most people who deserve to be paid do not have one,
+and asking for it is where a donation or a bounty payout usually dies. Paytag
+removes that step: you pay the name you already know.
+
+## How it works
 
 ```
 Sender wallet ──deposit(identity_key, token, amount, expiry)──▶ ┌──────────────────┐
-                                                                │ Soroban Escrow   │
-GitHub ──OAuth via Supabase Auth──▶ Verifier ──signed claim──▶  │ (identity-tagged)│
-                                    (Next.js route)             │                  │
+                                                                │  Soroban escrow  │
+GitHub / X ──OAuth via Supabase──▶ Verifier ──signed claim──▶   │ (identity-tagged)│
+                                   (Next.js route)              │                  │
 Recipient wallet ◀──claim(payment_ids, recipient, sig)────────  └──────────────────┘
-Sender wallet ◀──refund(payment_id) [after expiry]──────────────
+Sender wallet ◀──refund(payment_id) [after the window closes]───
 ```
 
-## Trust assumptions (stated plainly)
+The tag is `identity_key = sha256(kind_byte ‖ normalized_handle)`. It is
+computed identically in three places (the Rust contract, a Node CLI, and the
+Next.js route), and a test suite pins all three to the same bytes. If they ever
+disagreed, money would land on one tag while the claim looked for another, so
+that parity check runs before anything else in CI.
 
-A smart contract cannot make an HTTP request to GitHub. To bind the chain to internet
-identities, an off-chain **verifier** confirms ownership via GitHub OAuth and signs the result
-with ed25519; the contract verifies the signature with `ed25519_verify`.
+## The trust assumption
 
-The OAuth layer is **Supabase Auth**: it performs the code-for-token exchange and owns the
-session, so the GitHub client secret never enters this repo. The handle itself is not taken from
-the session — the callback asks `GET api.github.com/user` with the fresh provider token and uses
-GitHub's own answer, because the session's `user_metadata` is writable by the user. The
-verifier's identity row is then written with a key that bypasses row level security, which is
-what makes the row's existence proof of ownership rather than an assertion. Details: [SPEC
-§4.4](docs/SPEC.md).
+A smart contract cannot call GitHub. So an off chain **verifier** confirms
+ownership through OAuth and signs the result with ed25519, and the contract
+checks that signature with `ed25519_verify`.
 
-What that means: **if the verifier's signing key is compromised, an attacker can mint valid
-claim authorizations for funds sitting in escrow.** This is a known and accepted trust
-assumption of this MVP. Mitigation roadmap: a multi-signature verifier set, and on-chain
-verifiable attestation (zkTLS style). Both are out of scope for this 30-day window.
+**If the verifier's signing key is compromised, whoever holds it can mint valid
+claim authorizations and take money out of the contract.** That is a real,
+accepted limitation of this version, and it is written here rather than buried.
+The mitigation path is a multi signature verifier set, or on chain attestation
+(zkTLS style). Both are outside this build.
 
-## Secret management
+Two things narrow it today. The signing key is read from the server environment
+only, in a module marked `server-only`, so a build that pulled it toward the
+browser fails instead of shipping. And the handle is never taken from the
+session: the OAuth callback asks the provider itself with the token it just
+received, because session metadata is writable by the user.
 
-This repo started private and will be **public** at delivery. Git history cannot be undone, so
-the protection was set up before the first secret ever existed: `.gitignore` → `pre-commit`
-hook → `pre-push` hook → `gitleaks` scanning the entire history in CI. The scanner itself is
-verified by its own test suite (`scripts/test-scan-secrets.sh`).
+Detail: [SPEC §4](docs/SPEC.md), [SECURITY.md](docs/SECURITY.md).
 
-Setup is one command: `git config core.hooksPath .githooks` — `scripts/setup-mac.sh` does it
-automatically.
+## What is built
 
-For the key inventory, where each secret lives, and the mandatory pre-public checklist:
-**[docs/SECURITY.md](docs/SECURITY.md)**
+**Working:** sending to a GitHub or X handle, GitHub and X verification,
+claiming, refunding after expiry, a public directory of people who can be paid,
+contribution cards, a saved payout address, and a "Sent by me" list so a sender
+can find and refund a payment without remembering who it went to.
+
+**Reserved but not built:** repository identities (`owner/repo`) and Paytag
+nicknames. Both have a kind byte in the protocol and neither has a verification
+path, so the verifier refuses to sign for them.
+
+## Getting started
+
+```bash
+./scripts/setup-mac.sh               # Rust, wasm target, stellar-cli, funded testnet identity
+cd contracts && cargo test           # 61 contract tests
+cd web && pnpm install && pnpm test  # 149 parity and unit tests
+cd web && pnpm dev                   # http://localhost:3000
+```
+
+The testnet identity is funded by Friendbot, Stellar's faucet. No real money is
+involved anywhere in this repo.
+
+**Sending and refunding need nothing but a wallet and the contract address.**
+Claiming needs more, because proving a handle is the whole job: a GitHub OAuth
+App and a Supabase project, about twenty minutes and free. See
+[docs/SETUP-AUTH.md](docs/SETUP-AUTH.md). Skip it and the claim screen says so
+rather than breaking.
+
+## Decisions worth knowing
+
+**The contract is asset agnostic.** `deposit` takes the token address as an
+argument and moves money over the SEP-41 interface, so nothing in the contract
+knows which asset it holds. Changing assets is a UI decision, not a redeploy.
+
+**XLM only, and native XLM specifically.** An issued asset cannot be held by an
+account that has not opened a trustline for it first. That is a wall standing in
+front of exactly the people this product is for, the ones who have never touched
+Stellar. USDC stays defined and is still named in payment history, because
+deposits in it exist on the deployed contract, but it is not offered to new
+senders. Re offering it is one line in `web/lib/config.ts` (`SENDABLE_TOKENS`).
+
+**Amounts are typed in XLM, and the dollar figure is the estimate underneath.**
+The two are not equally true. XLM is what leaves the wallet, what the contract
+holds, and what the recipient claims; the dollar figure is one public API's
+opinion of what that is worth this minute, and nothing on chain reads it. A
+missing rate therefore costs nothing: the estimate disappears and the field
+keeps working.
+
+**The X account check is metered, so it is gated.** GitHub answers "does this
+account exist" for free from the visitor's own browser. X charges $0.010 per
+lookup against a credit balance, so that check runs server side behind five
+gates: already verified on Paytag, a connected wallet, a thirty day cache, a per
+caller window, and a monthly ceiling. Any gate closing degrades to the honest
+"we could not confirm this account" the page showed before the feature existed.
+Arithmetic and sources: [docs/API-COSTS.md](docs/API-COSTS.md).
+
+## Secrets
+
+This repo was built private and published at delivery. Git history cannot be
+undone, so the protection was in place before the first secret existed:
+`.gitignore`, a pre commit hook, a pre push hook, and gitleaks scanning the
+entire history in CI. The scanner has its own test suite
+(`scripts/test-scan-secrets.sh`), because a scanner nobody tests is a scanner
+nobody can trust.
+
+Hooks are enabled with `git config core.hooksPath .githooks`, which
+`scripts/setup-mac.sh` does for you.
+
+Key inventory and the pre public checklist: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Repo layout
 
 ```
-contracts/        Rust / soroban-sdk 26 — escrow contract
-  escrow/         paytag-escrow crate
-web/              Next.js 16 — UI + verifier API routes (Phase 3-4)
+contracts/escrow/     Rust, soroban-sdk 26. The escrow contract and its tests.
+web/                  Next.js 16. The interface and the verifier API routes.
 db/
-  schema.sql      Supabase schema, always current: profiles, identities, cards,
-                  payout_prefs, claim_nonces, RLS policies
-  schema_test.sql Behavioral test for the schema — nine negative cases, one retention case
-  migration-001-roles.sql    Adds cards.role (shiller | dev) and the directory view
-  migration-002-account.sql  Adds payout_prefs; keeps nonce records past account deletion
-  migration-003-x-lookup.sql Adds the X handle check's cache and its spend meter
-  catch-up.sql    Every migration in one paste, for a project created before them
+  schema.sql          Supabase schema, always current. Tables, RLS policies, views.
+  schema_test.sql     Behavioural test: ten rejection cases, two retention cases.
+  migration-*.sql     For projects created before a change. catch-up.sql has them all.
 docs/
-  PLAN.md         Phase-by-phase build plan, test criteria at every step
-  SPEC.md         Technical spec + data model (Phase 1)
-  SECURITY.md     Key inventory, layered defense, pre-public checklist
-  SETUP-AUTH.md   Setting up GitHub OAuth + Supabase so claiming works
-  DESIGN.md       The design language: the mark, the palette, the four screens
-  DEPLOY.md       Going live on Vercel: the secret gate, env vars, auth URLs
-  evidence/       Instawards evidence package: tx hashes, screenshots, logs
+  PLAN.md             Phase by phase build plan, with a test criterion per step.
+  SPEC.md             Protocol and data model. Identity keys, signatures, red team.
+  SECURITY.md         Key inventory, layered defence, pre public checklist.
+  SETUP-AUTH.md       GitHub OAuth and Supabase, so claiming works.
+  API-COSTS.md        What each external call costs and what stops it running away.
+  DESIGN.md           The mark, the palette, the screens.
+  DEPLOY.md           Going live on Vercel.
+  evidence/           Transaction hashes, screenshots, logs.
 scripts/
-  setup-mac.sh          One-time dev environment setup
-  paytag.mjs            Off-chain verifier CLI: identity keys, keygen, claim signing
-  scan-secrets.sh       Secret scanner (pre-commit + pre-push + CI)
-  test-scan-secrets.sh  Test suite for the scanner
+  setup-mac.sh        One time development setup.
+  paytag.mjs          Off chain verifier CLI: identity keys, keygen, claim signing.
+  scan-secrets.sh     Secret scanner, and its own test suite beside it.
 ```
 
-## Setup
+## Out of scope
 
-```bash
-./scripts/setup-mac.sh        # Rust + wasm target + stellar-cli + testnet identity
-cd contracts && cargo test    # contract tests — 50 of them
-cd web && pnpm install && pnpm test  # parity + unit tests — 149 of them
-cd web && pnpm dev                   # the demo UI on http://localhost:3000
-```
-
-The testnet identity is funded by **Friendbot**, Stellar's testnet faucet — `stellar keys
-generate --fund` calls it for you. No real money is involved anywhere in this repo.
-
-**Claiming needs one more step.** Sending and refunding work with nothing but a wallet and the
-contract address — no Supabase project, no OAuth App. Claiming does not: it needs a verified
-identity, which means a GitHub OAuth App and a Supabase project. About 20 minutes, all free:
-**[docs/SETUP-AUTH.md](docs/SETUP-AUTH.md)**. Skip it and the claim screen says so instead of
-breaking.
-
-## A note on the asset
-
-The escrow takes the token address as an argument to `deposit` and moves money over the SEP-41
-interface, so it is asset-agnostic by construction — nothing in the contract knows which asset
-it is holding. Adding a second asset is a UI decision, not a contract change.
-
-**XLM is the default, for one concrete reason: native XLM needs no trustline.** An issued asset
-cannot be held by an account that has not opened a trustline for it first, and that is a wall
-standing in front of exactly the people this product is for — the ones who have never touched
-Stellar. Native XLM has no such wall.
-
-**The amount is typed in XLM, and the dollar figure underneath is the estimate.** The two are not
-equally true: XLM is what leaves the wallet, what the contract holds, and what the recipient
-claims, while the dollar figure is one public API's opinion of what that is worth this minute,
-and nothing on chain reads it. Typing the estimate and deriving the real number from it put the
-sender's hands on the softer of the two figures. It also means a missing rate now costs nothing:
-the estimate disappears and the field keeps working, because the field never needed the rate.
-
-The send form offers **XLM only**. USDC remains defined, and the app still names it wherever it
-appears in payment history, because there are USDC deposits on the deployed contract; it is
-simply not offered to new senders. An issued asset cannot be held by a wallet that has not opened
-a trustline for it, so an asset picker on the send screen invites a choice that can strand the
-money behind a wall the recipient has never heard of. Re-offering it is one line in
-`web/lib/config.ts` (`SENDABLE_TOKENS`), and moving to mainnet USDC is a single address change.
-
-## Out of scope (Instawards SOW)
-
-Chrome extension · KYC/legal workflows · complex revenue splits
+Chrome extension, KYC and legal workflows, revenue splits.
 
 ## License
 
