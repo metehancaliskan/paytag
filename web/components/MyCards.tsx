@@ -8,6 +8,7 @@ import { GithubMark, XMark } from "./icons";
 import { parseLink, type PersonCard } from "@/lib/cards";
 import { roleForKind } from "@/lib/roles";
 import { KIND, kindUrlPrefix, slugOf } from "@/lib/identity";
+import DeleteCardConfirm from "./DeleteCardConfirm";
 
 type Mine = { identityId: string; card: PersonCard; published: boolean };
 
@@ -36,8 +37,6 @@ export default function MyCards({ empty }: { empty: string }) {
   // state. Keyed on the id rather than on kind:handle for the same reason the
   // fetch below is: it is the id that the delete statement carries.
   const [leaving, setLeaving] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
 
   // Keyed on the ROW IDS, not on kind:handle. Every write this feeds uses
   // `v.id`; a handle deleted and re-verified keeps the same kind:handle and gets
@@ -108,46 +107,6 @@ export default function MyCards({ empty }: { empty: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, key]);
 
-  /**
-   * Deletes one card.
-   *
-   * Straight from the browser, unlike disconnecting a handle, and the
-   * difference is not convenience: `cards_delete_own` in db/schema.sql allows a
-   * delete only where `profile_id = auth.uid()`, so the rule that decides this
-   * lives in the database. A request forged from another session removes
-   * nothing, whatever this component does. Disconnecting needs a server route
-   * because row level security gives users no write access to `identities` at
-   * all; cards are deliberately not like that — the person who wrote the words
-   * owns them.
-   *
-   * The card is the only thing that goes. The identity row, the payout address
-   * and the escrow are all keyed elsewhere, which is why this needs no typed
-   * confirmation the way disconnecting the last handle does.
-   */
-  async function remove(identityId: string) {
-    if (!supabase) return;
-    setBusy(true);
-    setFailed(null);
-    try {
-      const { error } = await supabase
-        .from("cards")
-        .delete()
-        .eq("identity_id", identityId);
-      if (error) throw new Error(error.message);
-
-      // The row leaves the list only after the database has agreed. An
-      // optimistic removal would show the card gone on a delete that was
-      // refused, and the next reload would bring it back — the worst of both
-      // answers on a screen whose whole job is telling you what is published.
-      setRows((prev) => (prev ?? []).filter((r) => r.identityId !== identityId));
-      setLeaving(null);
-    } catch (e) {
-      setFailed(e instanceof Error ? e.message : "Could not delete that card.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (identity.status !== "verified") {
     return <p className="text-sm text-mute">{empty}</p>;
   }
@@ -167,7 +126,7 @@ export default function MyCards({ empty }: { empty: string }) {
         <div className="skeleton h-16 w-full" />
       ) : rows.length === 0 ? (
         <p className="text-sm text-mute">
-          No card yet. A role and two fields puts you in the directory — your
+          No card yet. A role and two fields puts you in the directory. Your
           handle is payable either way.
         </p>
       ) : (
@@ -218,10 +177,9 @@ export default function MyCards({ empty }: { empty: string }) {
                 type="button"
                 className="btn btn-danger-quiet btn-sm"
                 aria-expanded={leaving === identityId}
-                onClick={() => {
-                  setLeaving(leaving === identityId ? null : identityId);
-                  setFailed(null);
-                }}
+                onClick={() =>
+                  setLeaving(leaving === identityId ? null : identityId)
+                }
               >
                 Delete
               </button>
@@ -229,57 +187,23 @@ export default function MyCards({ empty }: { empty: string }) {
                 {card.headline}
               </p>
 
-              {/* The confirm, in place — beside the card it removes rather than
+              {/* The confirm, in place: beside the card it removes rather than
                   in a dialog over the page, so the handle you are about to
-                  strip is still on screen while you decide. What survives is
-                  spelled out before the button that does it, because the
-                  reasonable fear here ("does this cost me my escrow?") has a
-                  reassuring answer and saying it is cheaper than a typed
-                  confirmation would be. */}
+                  strip is still on screen while you decide. `w-full` inside
+                  this flex-wrap row puts it on its own line. */}
               {leaving === identityId && (
-                <div className="w-full rounded-lg border border-danger/40 p-3 text-sm">
-                  <p className="font-semibold">
-                    Delete the{" "}
-                    <span className="mono">
-                      {kindUrlPrefix(card.kind)}
-                      {card.handle}
-                    </span>{" "}
-                    card?
-                  </p>
-                  <p className="mt-1 text-mute">
-                    The text goes, for good. Your handle stays verified, your
-                    payout address stays set, and escrow is untouched — money is
-                    bound to the handle on chain, not to this card. You can
-                    write a new one whenever you like.
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      disabled={busy}
-                      onClick={() => void remove(identityId)}
-                    >
-                      {busy && <span className="spinner" aria-hidden />}
-                      {busy ? "Deleting…" : "Delete"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-quiet btn-sm"
-                      disabled={busy}
-                      onClick={() => {
-                        setLeaving(null);
-                        setFailed(null);
-                      }}
-                    >
-                      Keep it
-                    </button>
-                  </div>
-                  {failed && (
-                    <p role="alert" className="mt-3 text-danger">
-                      {failed}
-                    </p>
-                  )}
-                </div>
+                <DeleteCardConfirm
+                  identityId={identityId}
+                  kind={card.kind}
+                  handle={card.handle}
+                  onCancel={() => setLeaving(null)}
+                  onDeleted={() => {
+                    setLeaving(null);
+                    setRows((prev) =>
+                      (prev ?? []).filter((r) => r.identityId !== identityId),
+                    );
+                  }}
+                />
               )}
             </li>
           ))}

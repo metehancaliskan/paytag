@@ -3,7 +3,7 @@ import ClaimPanel from "@/components/ClaimPanel";
 import { KIND_SLUG, isKindSlug } from "@/lib/identity";
 
 export const metadata: Metadata = {
-  title: "Claim — Paytag",
+  title: "Claim · Paytag",
   description:
     "Someone paid your GitHub or X handle. Verify the account, name a wallet, withdraw it.",
 };

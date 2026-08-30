@@ -240,7 +240,7 @@ export default function SendForm({
             </h2>
             <p className="mt-1 text-sm text-dim">
               Only the verified owner can move it
-              {refundableOn ? <> — or you, from around {refundableOn}</> : null}.
+              {refundableOn ? <>, or you from around {refundableOn}</> : null}.
             </p>
             <p className="mt-3 mono text-mute">{sent.hash}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -382,7 +382,7 @@ export default function SendForm({
         <p className="mt-2 text-xs text-mute">
           {priceState.status === "loading" && "…"}
           {priceState.status === "unavailable" &&
-            "No rate right now — the amount above is in XLM."}
+            "No rate right now. The amount above is in XLM."}
           {priceState.status === "ready" && units !== null && !problem && (
             <>
               Sends{" "}

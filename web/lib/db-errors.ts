@@ -42,8 +42,8 @@ export function describeSchemaGap(message: string): string | null {
   return (
     `This deployment's database does not have ${what} yet. ` +
     `Run ${file} in the Supabase SQL editor, then try again. ` +
-    `(If you already ran it, the API is still holding a stale schema — ` +
-    `run: notify pgrst, 'reload schema';)`
+    `(If you already ran it, the API is still holding a stale schema. ` +
+    `Run: notify pgrst, 'reload schema';)`
   );
 }
 

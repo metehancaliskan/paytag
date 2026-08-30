@@ -4,6 +4,7 @@ import { avatarUrl, cardPath, type PersonCard } from "@/lib/cards";
 import { KIND, kindUrlPrefix } from "@/lib/identity";
 import { ROLES, roleForKind } from "@/lib/roles";
 import { GithubMark, XMark } from "./icons";
+import CardOwnerActions from "./CardOwnerActions";
 
 /**
  * Quick-tip amounts, in dollars.
@@ -71,7 +72,7 @@ export default function PersonCardView({
       </div>
 
       {card.headline && (
-        <p className="mt-3 break-words font-medium leading-snug">
+        <p className="mt-3 line-clamp-2 break-words font-medium leading-snug">
           {card.headline}
         </p>
       )}
@@ -122,9 +123,17 @@ export default function PersonCardView({
   // The card is not one big link any more: the tip buttons are links of their
   // own, and a link inside a link is invalid markup that browsers resolve by
   // guessing. The name and the "Open" row carry the navigation instead.
+  //
+  // EVERY ROW IS AS TALL AS ITS TALLEST NEIGHBOUR. A grid cell already
+  // stretches to the height of its row; what did not stretch was the card
+  // inside it, so a two-line headline made one card taller than the one beside
+  // it and the $5 buttons sat at three different heights across the list. The
+  // fix is in two halves: `h-full` makes the card take the cell it was given,
+  // and the link around the text takes `flex-1` so the tip row is pushed to
+  // the bottom rather than following the last sentence.
   return (
-    <div className="card p-4 transition-colors hover:border-line-strong">
-      <Link href={cardPath(card)} className="block">
+    <div className="card flex h-full flex-col p-4 transition-colors hover:border-line-strong">
+      <Link href={cardPath(card)} className="block flex-1">
         {body}
       </Link>
 
@@ -151,8 +160,13 @@ export default function PersonCardView({
 }
 
 /**
- * The card as it appears on its owner's profile page — the full text, the
- * links, no clamping. The directory row is a teaser; this is the thing itself.
+ * The card as it appears on its owner's profile page: the full text, the links,
+ * no clamping. The directory row is a teaser; this is the thing itself.
+ *
+ * And for the person whose card it is, the place it is edited from. Settings
+ * used to be the only way in, which made a round trip out of a typo. The badges
+ * row carries the controls because it is the one line of the card that is about
+ * the card rather than in it; `CardOwnerActions` draws nothing for anybody else.
  */
 export function PersonCardDetail({ card }: { card: PersonCard }) {
   // From the platform, not from the stored column. The role IS the platform
@@ -166,6 +180,7 @@ export function PersonCardDetail({ card }: { card: PersonCard }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="badge badge-claimed">verified</span>
         <span className="badge">{role.label}</span>
+        <CardOwnerActions kind={card.kind} handle={card.handle} />
       </div>
 
       {card.headline && (
@@ -234,6 +249,9 @@ export function NoCardYet({
         No card yet. {kindUrlPrefix(kind)}
         {handle} is payable anyway.
       </p>
+      {/* The same gap the other way round: your own page, no card, and the way
+          to write one was on a different screen. */}
+      <CardOwnerActions kind={kind} handle={handle} variant="empty" />
     </div>
   );
 }

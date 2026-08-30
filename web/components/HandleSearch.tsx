@@ -157,12 +157,12 @@ export default function HandleSearch({
         <p id={hintId} className="mt-2 text-xs text-mute">
           {slug === null ? (
             <>
-              Pick the platform first — the same name can be two different
+              Pick the platform first. The same name can be two different
               people.
             </>
           ) : handle && handle !== raw.trim() ? (
             <>
-              reads as <span className="mono text-dim">{handle}</span> — a
+              reads as <span className="mono text-dim">{handle}</span>. A
               full URL, an @ prefix or capitals all resolve to the same identity
             </>
           ) : (

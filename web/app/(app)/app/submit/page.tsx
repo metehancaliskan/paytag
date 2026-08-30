@@ -4,7 +4,7 @@ import CardEditor from "@/components/CardEditor";
 import { KIND_SLUG, isKindSlug } from "@/lib/identity";
 
 export const metadata: Metadata = {
-  title: "Submit yourself — Paytag",
+  title: "Submit yourself · Paytag",
   description:
     "Say what you contribute to the Stellar ecosystem, and let people pay your handle for it.",
 };

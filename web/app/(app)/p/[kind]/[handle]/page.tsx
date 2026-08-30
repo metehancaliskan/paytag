@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const r = resolve(kind, handle);
   if (!r) return { title: "Paytag" };
   return {
-    title: `@${r.handle} · ${kindLabel(r.kind)} — Paytag`,
+    title: `@${r.handle} · ${kindLabel(r.kind)} · Paytag`,
     description: `Pay ${kindUrlPrefix(r.kind)}${r.handle}. It waits in escrow until the owner of the account verifies it and claims it.`,
   };
 }
@@ -197,7 +197,7 @@ function IdentityCard({
 
       {kind === KIND.XUser && (
         <p className="mt-4 text-sm text-mute">
-          No X preview —{" "}
+          No X preview, so{" "}
           <a
             className="link"
             href={profileUrl(kind, handle)}

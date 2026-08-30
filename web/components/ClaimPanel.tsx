@@ -226,7 +226,7 @@ export default function ClaimPanel({
             </span>
             {hintKind !== null && hintKind !== undefined
               ? ". Sign in as that account."
-              : " — on GitHub or on X. Verify whichever one is yours."}
+              : ", on GitHub or on X. Verify whichever one is yours."}
           </p>
         )}
 

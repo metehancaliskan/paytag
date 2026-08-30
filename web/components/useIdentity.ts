@@ -128,7 +128,7 @@ export function useIdentity(): IdentityApi {
   const api = useContext(IdentityContext);
   if (!api) {
     throw new Error(
-      "useIdentity() needs <IdentityProvider> above it — it is in app/(app)/layout.tsx.",
+      "useIdentity() needs <IdentityProvider> above it. It is in app/(app)/layout.tsx.",
     );
   }
   return api;

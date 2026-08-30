@@ -10,8 +10,8 @@
 function need(value: string | undefined, name: string): string {
   if (!value || value.trim() === "") {
     throw new Error(
-      `Missing environment variable: ${name}. Fill it in web/.env.local — ` +
-        `see .env.example for the full list.`,
+      `Missing environment variable: ${name}. Fill it in web/.env.local. ` +
+        `See .env.example for the full list.`,
     );
   }
   return value.trim();

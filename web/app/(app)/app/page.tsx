@@ -14,7 +14,7 @@ import { KIND, type IdentityKind } from "@/lib/identity";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Dashboard — Paytag",
+  title: "Dashboard · Paytag",
   description:
     "Developers and community contributors in the Stellar ecosystem, each one payable by handle. The money waits in escrow until they withdraw it.",
 };

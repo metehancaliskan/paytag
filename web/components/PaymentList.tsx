@@ -35,7 +35,7 @@ export default function PaymentList({
   if (failed) {
     return (
       <div className="card p-6 text-center text-sm text-mute">
-        Blank because the chain could not be read — not because it is empty.
+        Blank because the chain could not be read, not because it is empty.
       </div>
     );
   }
@@ -57,7 +57,7 @@ export default function PaymentList({
       <div className="card p-6 text-center">
         <p className="font-medium">Nothing in escrow yet</p>
         <p className="mt-1 text-sm text-mute">
-          Be the first — they need no wallet for it to be waiting.
+          Be the first. They need no wallet for it to be waiting.
         </p>
       </div>
     );
@@ -204,7 +204,7 @@ function PaymentRow({
 
       {p.status === STATUS.Pending && expired && !isSender && (
         <p className="mt-2 text-xs text-mute">
-          Past its window — the sender can take it back.
+          Past its window. The sender can take it back.
         </p>
       )}
 

@@ -52,7 +52,7 @@ export const ESCROW_ERRORS: Record<number, string> = {
   5: "That escrow window is longer than the contract allows (30 days maximum).",
   6: "No such payment.",
   7: "This payment has already been claimed or refunded.",
-  8: "The claim window has not closed yet — no refund before expiry.",
+  8: "The claim window has not closed yet. No refund before expiry.",
   9: "The list of payments to claim is empty.",
   10: "The authorization has expired. Verify the account again.",
   11: "This authorization was already used (replay protection).",
@@ -78,12 +78,12 @@ export const TOKEN_ERRORS: Record<number, string> = {
   3: "The token contract is already initialized.",
   4: "The token contract refused the operation (unauthorized).",
   5: "The token contract could not authenticate the caller.",
-  6: "That account does not exist on the network yet. Fund it first — on testnet, Friendbot does it for free.",
+  6: "That account does not exist on the network yet. Fund it first. On testnet, Friendbot does it for free.",
   7: "That address is not a classic Stellar account.",
   8: "The amount cannot be negative.",
   9: "The spending allowance is not enough.",
   10: "Not enough balance of this token.",
-  11: "This trustline is deauthorized — the asset issuer has frozen it.",
+  11: "This trustline is deauthorized: the asset issuer has frozen it.",
   12: "The amount overflowed.",
   13: "This wallet has no trustline for this asset, so it cannot hold it. Add the asset in your wallet first (Freighter: Manage Assets), then get some sent to you.",
 };
@@ -163,10 +163,10 @@ export function describeEscrowError(err: unknown): string {
   // The three failures that are not the contract's fault at all, and that a
   // raw XDR dump explains very badly.
   if (/User declined|denied|rejected|cancel/i.test(raw)) {
-    return "You dismissed the request in your wallet — nothing was sent.";
+    return "You dismissed the request in your wallet. Nothing was sent.";
   }
   if (/Account not found|NotFound.*account/i.test(raw)) {
-    return "This wallet does not exist on the network yet. Fund it first — on testnet, Friendbot does it for free.";
+    return "This wallet does not exist on the network yet. Fund it first. On testnet, Friendbot does it for free.";
   }
   if (/fetch|network|Failed to load|ECONN|timeout/i.test(raw)) {
     return `Could not reach the Soroban RPC endpoint. Check your connection and try again. (${raw})`;

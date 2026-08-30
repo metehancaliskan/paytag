@@ -105,7 +105,7 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
             title={loadError ? undefined : `${fromUnits(total)} ${headlineAsset.symbol}`}
           >
             {loadError ? (
-              <span className="text-mute">—</span>
+              <span className="text-mute">?</span>
             ) : (
               displayUnits(total)
             )}{" "}

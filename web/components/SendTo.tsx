@@ -6,12 +6,8 @@ import Avatar from "./Avatar";
 import SendForm from "./SendForm";
 import { avatarUrl } from "@/lib/cards";
 import { browserSupabase } from "@/lib/supabase/client";
-import {
-  lookupGithub,
-  type GithubLookup,
-  type GithubProfile,
-} from "@/lib/github";
-import { lookupXHandle, type XAnswer } from "@/lib/x-client";
+import { lookupGithub, type GithubProfile } from "@/lib/github";
+import { lookupXHandle } from "@/lib/x-client";
 import { useWallet } from "./WalletProvider";
 import { latestLedger } from "@/lib/contract";
 import {
@@ -64,7 +60,10 @@ import {
  *             printed before the endpoint existed. The profile picture
  *             (lib/cards.ts, a free third-party URL loaded by the reader's own
  *             browser) and the link to the profile carry it in that case, and a
- *             missing photo is itself a signal.
+ *             missing photo is itself a signal. A handle already verified on
+ *             Paytag skips the call entirely: OAuth proved both that the
+ *             account exists and who holds it, so the metered question has
+ *             nothing left to add.
  *   Paytag  → our own `identities` table, which is world readable. Free, and the
  *             most useful line of the three: it says whether this handle can
  *             claim today or whether the money will sit until somebody verifies.
@@ -119,10 +118,11 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
       // about the same 32 bytes.
       const identityHex = toHex(await identityKey(handle, kind));
 
-      const [lookup, verified, ledger] = await Promise.all([
-        kind === KIND.GithubUser
-          ? lookupGithub(handle)
-          : lookupXHandle(handle, address),
+      // The free questions first, and one of them settles the expensive one.
+      // GitHub's lookup is free and runs from the visitor's own browser, so it
+      // goes in this batch; X's is not, and it waits below.
+      const [gh, verified, ledger] = await Promise.all([
+        kind === KIND.GithubUser ? lookupGithub(handle) : null,
         (async () => {
           if (!supabase) return null;
           const { data, error } = await supabase
@@ -136,30 +136,41 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
         latestLedger().catch(() => null),
       ]);
 
+      /**
+       * A VERIFIED HANDLE NEVER BUYS AN X LOOKUP.
+       *
+       * The paid call answers "is there an account with this name". Somebody
+       * verified on Paytag went through the provider's own OAuth, which
+       * answers that AND says who holds it. Spending $0.010 to learn less than
+       * we already know is money for nothing, and on the handles people pay
+       * most often — the ones the directory links to, which are verified by
+       * definition — it would have been most of the bill.
+       *
+       * `null` here means "we did not need to ask", which is why it reads
+       * differently below from an X lookup that came back empty.
+       */
+      const x =
+        kind === KIND.XUser && verified !== true
+          ? await lookupXHandle(handle, address)
+          : null;
+
       // A definite "no such account" refuses, on either platform. This is the
       // whole reason the check exists: money bound to a handle nobody holds is
       // not lost, but it is locked up until the refund window opens, and the
       // sender finds out a week later.
-      if (lookup.status === "missing") {
+      if (gh?.status === "missing" || x?.status === "missing") {
         setProblem(
-          `No ${label} account called ${handle}. Check the spelling — money sent to a handle nobody holds waits until the refund window opens.`,
+          `No ${label} account called ${handle}. Check the spelling. Money sent to a handle nobody holds waits until the refund window opens.`,
         );
         return;
       }
-
-      // One `Promise.all` for two platforms means one variable holding two
-      // shapes. Splitting it here rather than reaching into `lookup` at each
-      // use keeps the platform test in one place — and this component's whole
-      // subject is that GitHub and X are not interchangeable.
-      const gh = kind === KIND.GithubUser ? (lookup as GithubLookup) : null;
-      const x = kind === KIND.XUser ? (lookup as XAnswer) : null;
 
       setChecked({
         handle,
         identityHex,
         profile: gh?.status === "found" ? gh.profile : null,
         xDisplayName: x?.status === "found" ? x.displayName : null,
-        unreachable: lookup.status === "unreachable",
+        unreachable: gh?.status === "unreachable" || x?.status === "unreachable",
         xCheckOffered: x?.configured === true,
         verified,
         ledger,
@@ -262,7 +273,7 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
               <p className="mt-2 text-xs">
                 {checked.verified === true ? (
                   <span className="text-accent-text">
-                    Verified on Paytag — they can claim this today.
+                    Verified on Paytag. They can claim this today.
                   </span>
                 ) : (
                   <span className="text-mute">
@@ -281,13 +292,23 @@ export default function SendTo({ kind }: { kind: IdentityKind }) {
                   account does not resolve, there is no photo, and the reader can
                   see that faster than they can read a sentence. */}
               {/* Only the one case that is actually unusual gets a line: we
-                  asked and got nothing back. On X that line is also suppressed
-                  when the deployment does not offer the paid check at all,
-                  because a warning that is always on screen is wallpaper, and
-                  this page used to carry exactly that. Not offering the check
-                  is the state the page was in before /api/x/lookup existed, and
-                  it says nothing new. */}
+                  asked and got nothing back.
+
+                  AND ONLY WHEN IT STILL MEANS SOMETHING. A handle verified on
+                  Paytag is one whose owner signed in through the provider, so
+                  the account exists and we know who holds it. Printing "this
+                  account is unconfirmed" underneath "verified on Paytag" put
+                  two lines that contradict each other in front of somebody
+                  about to send money, and the alarming one was the one that
+                  knew less: a rate-limited GitHub says nothing about an
+                  account OAuth already proved.
+
+                  On X the line is suppressed for a second reason too — when
+                  the deployment does not offer the paid check at all, a warning
+                  that is permanently on screen is wallpaper, and this page used
+                  to carry exactly that. */}
               {checked.unreachable &&
+                checked.verified !== true &&
                 (kind === KIND.GithubUser || checked.xCheckOffered) && (
                   <p className="mt-2 text-xs text-warn">
                     {kind === KIND.GithubUser

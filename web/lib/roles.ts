@@ -54,14 +54,14 @@ export const ROLES: Record<RoleKey, Role> = {
     key: "shiller",
     label: "Community",
     pick: "I bring people in",
-    blurb: "Threads, posts, spaces — the audience you grew.",
+    blurb: "Threads, posts, spaces: the audience you grew.",
     kind: KIND.XUser,
   },
   dev: {
     key: "dev",
     label: "Developer",
     pick: "I build",
-    blurb: "Contracts, tools, SDKs, docs — the code you shipped.",
+    blurb: "Contracts, tools, SDKs, docs: the code you shipped.",
     kind: KIND.GithubUser,
   },
 };

@@ -124,7 +124,7 @@ export function normalizeHandle(raw: string, kind: IdentityKind): string {
 
   if (s.includes("/")) {
     throw new Error(
-      `That ${rule.label} link has extra path on it — enter just the username.`,
+      `That ${rule.label} link has extra path on it. Enter just the username.`,
     );
   }
 
@@ -137,7 +137,7 @@ export function normalizeHandle(raw: string, kind: IdentityKind): string {
   }
   if (s.length > rule.maxLen || !rule.pattern.test(s)) {
     throw new Error(
-      `${JSON.stringify(raw)} is not a valid ${rule.label} username — ${rule.hint}.`,
+      `${JSON.stringify(raw)} is not a valid ${rule.label} username: ${rule.hint}.`,
     );
   }
   return s;

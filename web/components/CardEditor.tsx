@@ -209,7 +209,7 @@ export default function CardEditor({
         : headline.trim().length > HEADLINE_MAX
           ? "The headline is too long."
           : summary.trim().length < SUMMARY_MIN
-            ? `A couple more words — ${SUMMARY_MIN - summary.trim().length} to go.`
+            ? `A couple more words, ${SUMMARY_MIN - summary.trim().length} to go.`
             : summary.trim().length > SUMMARY_MAX
               ? "The description is too long."
               : badLink
@@ -310,7 +310,7 @@ export default function CardEditor({
   if (loadFailed) {
     return (
       <p role="alert" className="card p-5 text-sm text-danger">
-        Could not read your card. Reload the page — nothing was changed.
+        Could not read your card, and nothing was changed. Reload the page.
       </p>
     );
   }
@@ -403,7 +403,7 @@ export default function CardEditor({
             <p className="mt-1 text-sm text-mute">
               {mine.length > 0 ? (
                 <>
-                  It adds {provider.domain} to this account —{" "}
+                  It adds {provider.domain} to this account;{" "}
                   <span className="mono">
                     {kindUrlPrefix(mine[0].kind)}
                     {mine[0].handle}
@@ -486,7 +486,7 @@ export default function CardEditor({
           <summary className="cursor-pointer font-semibold">
             Tags and links{" "}
             <span className="font-normal text-mute">
-              — optional
+              (optional)
               {(ecosystems.length > 0 || cleanLinks.length > 0) && (
                 <>
                   {" · "}

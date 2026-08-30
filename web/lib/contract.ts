@@ -315,7 +315,7 @@ export async function submitSigned(signedXdr: string): Promise<SubmitResult> {
     throw new Error(
       `Transaction failed (${final.status}). Hash: ${sent.hash}` +
         ("resultXdr" in final && final.resultXdr
-          ? ` — ${final.resultXdr.toXdr("base64")}`
+          ? `: ${final.resultXdr.toXdr("base64")}`
           : ""),
     );
   }

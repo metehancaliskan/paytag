@@ -7,7 +7,7 @@ import { KIND, normalizeHandle, type IdentityKind } from "@/lib/identity";
 type Params = { params: Promise<{ handle: string }> };
 
 export const metadata: Metadata = {
-  title: "Which account? — Paytag",
+  title: "Which account? · Paytag",
   description: "The same username can be two different people. Pick one.",
 };
 

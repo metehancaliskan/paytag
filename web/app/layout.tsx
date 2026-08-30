@@ -5,7 +5,7 @@ import { WalletProvider } from "@/components/WalletProvider";
 import { IS_TESTNET } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: "Paytag — pay a GitHub or X handle",
+  title: "Paytag · pay a GitHub or X handle",
   description:
     "Pay someone who has no wallet, knowing nothing but their GitHub or X username. It waits in a Soroban escrow until the owner of the handle verifies the account and withdraws it.",
 };
@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           {IS_TESTNET && (
             <p className="banner-warn">
-              Test network — the money here is worth nothing.
+              Test network. The money here is worth nothing.
             </p>
           )}
 

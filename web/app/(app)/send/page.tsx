@@ -4,7 +4,7 @@ import { KIND } from "@/lib/identity";
 import { X_ENABLED } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: "Send — Paytag",
+  title: "Send · Paytag",
   description:
     "Pay a GitHub or X handle directly. The account is checked before anything is sent.",
 };
@@ -40,7 +40,7 @@ export default function SendPage() {
       {!X_ENABLED && (
         <p className="px-1 text-xs text-mute">
           X sign-in is not configured on this deployment, so nobody can verify an
-          X handle here yet — money sent to one waits until they can.
+          X handle here yet. Money sent to one waits until they can.
         </p>
       )}
     </div>

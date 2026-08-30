@@ -6,7 +6,7 @@ import MyCards from "@/components/MyCards";
 import SignOutButton from "@/components/SignOutButton";
 
 export const metadata: Metadata = {
-  title: "Settings — Paytag",
+  title: "Settings · Paytag",
   description:
     "Your verified handles, where your escrow pays out, your cards, and the way out.",
 };

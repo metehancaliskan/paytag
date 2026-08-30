@@ -38,8 +38,8 @@ export default function Error({
           </>
         ) : (
           <>
-            The failure is below. Nothing was signed and nothing was sent — this
-            app never moves money without a wallet confirmation.
+            The failure is below. Nothing was signed and nothing was sent.
+            This app never moves money without a wallet confirmation.
           </>
         )}
       </p>

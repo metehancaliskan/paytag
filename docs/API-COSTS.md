@@ -61,11 +61,12 @@ answer a request carrying an app-only bearer token), the caller does not have to
 have an account (`/send` needs a wallet and nothing else, by design), and every
 answer draws on a credit balance with no free allowance.
 
-So `/api/x/lookup` exists, and four gates stand in front of it. The first three
+So `/api/x/lookup` exists, and five gates stand in front of it. The first four
 are free; only a request that clears all of them spends a cent.
 
 | # | Gate | Where | What it stops |
 | --- | --- | --- | --- |
+| 0 | Already verified on Paytag | `components/SendTo.tsx` | paying to learn less than we know |
 | 1 | A connected wallet, checksum-valid | `app/api/x/lookup/route.ts` | `curl` in a loop |
 | 2 | 30-day cache, per handle | `x_profiles` | paying twice for one question |
 | 3 | 50 lookups per 3 hours, per IP **and** per wallet | `x_lookup_claim` | one caller going haywire |
@@ -80,6 +81,17 @@ why it is one gate of four rather than the only one. A sign-in wall would be
 stronger and was the wrong trade: it would put the check out of reach of exactly
 the person it is for — the stranger sending money to a handle for the first
 time.
+
+**Gate 0 is free and it is the one that matters most in normal use.** The paid
+call answers "is there an account with this name". Somebody verified on Paytag
+signed in through X's own OAuth, which answers that *and* says who holds the
+handle. So a verified handle never buys a lookup — and verified handles are
+exactly the ones people pay most often, because they are what the directory
+links to. Without this gate they would have been most of the bill.
+
+It is also why the send page no longer prints "this account is unconfirmed"
+under "verified on Paytag". Those two lines contradicted each other in front of
+somebody about to send money, and the alarming one was the one that knew less.
 
 **Gate 2 is what makes it cheap.** Whether an X account exists changes about
 once in that account's lifetime. Both answers are cached, deliberately: a name
