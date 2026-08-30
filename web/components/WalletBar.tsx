@@ -255,6 +255,21 @@ export default function WalletBar() {
 
           <div className="menu-sep" />
 
+          {/* Beside the wallet rather than the account, because that is what it
+              belongs to: a refund is signed by the key that sent the money, and
+              needs no Paytag account at all. It is here for everyone with a
+              wallet connected, signed in or not. */}
+          <Link
+            href="/sent"
+            className="menu-item"
+            onClick={() => setOpen(false)}
+          >
+            Sent by me
+            <ChevronRight className="ml-auto shrink-0 text-mute" />
+          </Link>
+
+          <div className="menu-sep" />
+
           {/* -------------------------------------------------- wallet
               The address short rather than all 56 characters: the full one is
               in the clipboard a click away, and printing it here was most of

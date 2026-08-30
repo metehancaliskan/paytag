@@ -132,6 +132,39 @@ export async function listPaymentsForIdentity(
   return found;
 }
 
+/**
+ * The payments one wallet has SENT.
+ *
+ * The same walk as above and for the same reason, turned around: the contract
+ * indexes payments by neither identity nor sender, so both questions are the
+ * same scan with a different filter. Kept as two functions rather than one with
+ * a predicate because the two have different futures — the identity list is the
+ * one that moves behind a Supabase index first (it is on every profile page),
+ * while this one is opened rarely, by a person who came looking for it.
+ *
+ * Why it exists at all: `refund` is the only way money comes back, and until
+ * this list there was no way to find a payment except by remembering who it was
+ * sent to and opening their page. A sender who forgot the handle had no route
+ * to their own money inside the app.
+ */
+export async function listPaymentsFrom(
+  address: string,
+  maxScan = 300,
+): Promise<Payment[]> {
+  const found: Payment[] = [];
+  const CHUNK = 8;
+
+  for (let start = 1; start <= maxScan; start += CHUNK) {
+    const ids = Array.from({ length: CHUNK }, (_, i) => start + i);
+    const batch = await Promise.all(ids.map((id) => getPayment(id)));
+    for (const p of batch) {
+      if (p && p.from === address) found.push(p);
+    }
+    if (batch.some((p) => p === null)) break;
+  }
+  return found;
+}
+
 export async function tokenDecimals(
   tokenId = DEFAULT_TOKEN.contractId,
 ): Promise<number> {

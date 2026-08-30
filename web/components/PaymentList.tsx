@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useWallet } from "./WalletProvider";
 import CopyButton from "./CopyButton";
@@ -13,6 +14,8 @@ import { describeEscrowError } from "@/lib/stellar";
 import { sign, networkMismatch } from "@/lib/freighter";
 import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
 import { explorerAccount, explorerTx, tokenByContractId } from "@/lib/config";
+import { kindUrlPrefix, slugOf } from "@/lib/identity";
+import type { RecipientMap } from "@/lib/sent";
 
 const STATUS_LABEL: Record<number, { text: string; cls: string }> = {
   [STATUS.Pending]: { text: "Waiting", cls: "badge badge-pending" },
@@ -20,17 +23,48 @@ const STATUS_LABEL: Record<number, { text: string; cls: string }> = {
   [STATUS.Refunded]: { text: "Refunded", cls: "badge badge-refunded" },
 };
 
+/**
+ * WHICH END OF THE PAYMENT THE READER IS STANDING AT.
+ *
+ * "in"  — a handle's own page. Every row arrived from somewhere, so the
+ *         interesting half is who sent it.
+ * "out" — the sender's own list. Every row came from the same wallet, theirs,
+ *         so saying so on each one is a column of identical text. What they
+ *         cannot see without being told is where each one went.
+ *
+ * One component with a switch rather than two lists, because everything else on
+ * the row is the same and the refund button especially so: it appears under
+ * exactly the same three conditions in both places, and two copies of that rule
+ * is how they end up disagreeing.
+ */
+export type Direction = "in" | "out";
+
 export default function PaymentList({
   payments,
   ledger,
   failed = false,
   onRefunded,
+  direction = "in",
+  recipients,
+  empty,
+  title = "Payments",
 }: {
   payments: Payment[] | null;
   ledger: number | null;
   /** The read failed — an empty list here means "unknown", not "none". */
   failed?: boolean;
   onRefunded: () => void;
+  direction?: Direction;
+  /** Only for "out": identity_key → who holds it, where that is knowable. */
+  recipients?: RecipientMap;
+  /** Replaces the empty state, which reads differently from each end. */
+  empty?: { title: string; line: string };
+  /**
+   * Names the section. The sent page cuts one list into three by what can be
+   * done with each, so "Payments" three times over would be three headings
+   * that say nothing and no heading that does.
+   */
+  title?: string;
 }) {
   if (failed) {
     return (
@@ -55,9 +89,9 @@ export default function PaymentList({
   if (payments.length === 0) {
     return (
       <div className="card p-6 text-center">
-        <p className="font-medium">Nothing waiting yet</p>
+        <p className="font-medium">{empty?.title ?? "Nothing waiting yet"}</p>
         <p className="mt-1 text-sm text-mute">
-          Be the first. They need no wallet for it to be waiting.
+          {empty?.line ?? "Be the first. They need no wallet for it to be waiting."}
         </p>
       </div>
     );
@@ -68,7 +102,7 @@ export default function PaymentList({
   return (
     <div className="card overflow-hidden">
       <div className="flex items-baseline justify-between gap-3 px-5 py-3.5 divider border-t-0">
-        <h2 className="text-sm font-semibold">Payments</h2>
+        <h2 className="text-sm font-semibold">{title}</h2>
         <span className="text-xs text-mute">
           {payments.length} {payments.length === 1 ? "payment" : "payments"}
         </span>
@@ -81,6 +115,8 @@ export default function PaymentList({
             payment={p}
             ledger={ledger}
             onRefunded={onRefunded}
+            direction={direction}
+            recipient={recipients?.[p.identityHex.toLowerCase()] ?? null}
           />
         ))}
       </ul>
@@ -97,10 +133,14 @@ function PaymentRow({
   payment: p,
   ledger,
   onRefunded,
+  direction,
+  recipient,
 }: {
   payment: Payment;
   ledger: number | null;
   onRefunded: () => void;
+  direction: Direction;
+  recipient: RecipientMap[string];
 }) {
   const { address } = useWallet();
   const [busy, setBusy] = useState<string | null>(null);
@@ -160,18 +200,39 @@ function PaymentRow({
           <span className="text-mute">{asset?.symbol ?? "tokens"}</span>
         </span>
 
-        <span className="text-xs text-mute">
-          from{" "}
-          <a
-            className="mono link"
-            href={explorerAccount(p.from)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {shortAddr(p.from)}
-          </a>
-          {isSender && <span className="ml-1 text-accent-text">(you)</span>}
-        </span>
+        {direction === "in" ? (
+          <span className="text-xs text-mute">
+            from{" "}
+            <a
+              className="mono link"
+              href={explorerAccount(p.from)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortAddr(p.from)}
+            </a>
+            {isSender && <span className="ml-1 text-accent-text">(you)</span>}
+          </span>
+        ) : (
+          <span className="text-xs text-mute">
+            to{" "}
+            {recipient ? (
+              <Link
+                className="mono link"
+                href={`/p/${slugOf(recipient.kind)}/${recipient.handle}`}
+              >
+                {kindUrlPrefix(recipient.kind)}
+                {recipient.handle}
+              </Link>
+            ) : (
+              /* Not a loading state and not a failure: the payment carries a
+                 hash of the handle, and nobody has proved that handle here, so
+                 there is no name to look up. Saying it plainly beats printing
+                 32 bytes of hex at somebody trying to find their money. */
+              <span>a handle nobody has verified yet</span>
+            )}
+          </span>
+        )}
 
         <span className="ml-auto flex items-center gap-2">
           {p.status === STATUS.Pending && ledgersLeft !== null && (
