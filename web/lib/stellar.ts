@@ -1,5 +1,5 @@
 import { rpc, Networks, StrKey, Account } from "@stellar/stellar-sdk";
-import { ESCROW_ID, NETWORK, RPC_URL, USDC_SAC_ID } from "./config";
+import { ESCROW_ID, NETWORK, RPC_URL, TOKENS } from "./config";
 
 export const networkPassphrase =
   NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
@@ -89,17 +89,59 @@ export const TOKEN_ERRORS: Record<number, string> = {
 };
 
 /**
+ * Which escrow error codes each call can actually raise.
+ *
+ * This is the reliable half of telling the two contracts apart, and it is
+ * reliable because it is not a guess: `deposit` has four failure modes of its
+ * own and #13 is not one of them, so a deposit that comes back #13 was the
+ * TOKEN speaking, whatever the message happens to name. Read straight off
+ * `enum Error` and the guard clauses in contracts/escrow/src/lib.rs.
+ *
+ * A sender with no trustline for the asset used to be told "this payment has
+ * expired and can only be refunded now" — escrow #13, PaymentExpired — on a
+ * screen where no payment existed yet. Two contracts, one number, and the
+ * wrong one read.
+ */
+const ESCROW_CODES: Record<EscrowCall, readonly number[]> = {
+  // load_config, amount, expiry in past, expiry too far
+  deposit: [2, 3, 4, 5],
+  // every check in `claim`, plus the strkey guard
+  claim: [2, 6, 7, 9, 10, 11, 12, 13, 14, 15],
+  // not found, already settled, not yet expired
+  refund: [6, 7, 8],
+};
+
+/** Which of the contract's entry points was being called. */
+export type EscrowCall = "deposit" | "claim" | "refund";
+
+/**
  * Which contract actually threw. Soroban prints the innermost failure first,
  * so the contract id that appears earliest in the message is the one that
  * raised the error — the outer callers follow in the fn_call events after it.
  *
- * A heuristic, not a guarantee. When it cannot tell, it says so rather than
- * guessing, because a confidently wrong error message costs more than an
- * honest vague one.
+ * The id is not always in the message at all, though: a failed simulation
+ * often names only the contract that was invoked, which is the escrow even
+ * when the token is what refused. So `call` is consulted first and the id
+ * search is the fallback — knowing which codes the escrow can even produce
+ * beats reading a string that may not mention the culprit.
+ *
+ * When neither can tell, it says so rather than guessing, because a
+ * confidently wrong error message costs more than an honest vague one.
  */
-function whoThrew(text: string): "escrow" | "token" | "unknown" {
+function whoThrew(
+  text: string,
+  code: number,
+  call?: EscrowCall,
+): "escrow" | "token" | "unknown" {
+  if (call && !ESCROW_CODES[call].includes(code)) return "token";
+
   const escrow = text.indexOf(ESCROW_ID);
-  const token = text.indexOf(USDC_SAC_ID);
+  // Any asset this deployment knows, not just one of them: the escrow moves
+  // whichever token the payment names, and every one of them can refuse.
+  const token = TOKENS.map((t) => text.indexOf(t.contractId))
+    .filter((i) => i >= 0)
+    .reduce((min, i) => (min < 0 || i < min ? i : min), -1);
+
   if (escrow < 0 && token < 0) return "unknown";
   if (token < 0) return "escrow";
   if (escrow < 0) return "token";
@@ -135,10 +177,10 @@ export async function accountExists(
  * on. Falls back to the raw message rather than swallowing it: an unknown
  * failure that prints nothing is worse than one that prints too much.
  */
-export function describeEscrowError(err: unknown): string {
+export function describeEscrowError(err: unknown, call?: EscrowCall): string {
   const code = contractErrorCode(err);
   if (code !== null) {
-    const source = whoThrew(errorText(err));
+    const source = whoThrew(errorText(err), code, call);
     const escrowSays = ESCROW_ERRORS[code];
     const tokenSays = TOKEN_ERRORS[code];
 

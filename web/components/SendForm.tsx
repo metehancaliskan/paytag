@@ -208,7 +208,7 @@ export default function SendForm({
       void loadBalance();
       onSent();
     } catch (e) {
-      setError(describeEscrowError(e));
+      setError(describeEscrowError(e, "deposit"));
     } finally {
       setBusy(null);
     }
@@ -428,7 +428,15 @@ export default function SendForm({
 
       {token.needsTrustline && (
         <p className="mt-3 text-xs text-mute">
-          {token.symbol} needs a trustline on both wallets. XLM needs none.
+          {address && balance === null
+            ? // Said BEFORE the signature, not after. A wallet with no trustline
+              // for this asset cannot send it, and the only way the old form
+              // found out was a transaction that reverted once it had already
+              // been approved. We cannot prove the trustline is missing from
+              // here — an unreadable balance is also what an RPC hiccup looks
+              // like — so the sentence says what we know and no more.
+              `We could not read a ${token.symbol} balance for this wallet. If it has no ${token.symbol} trustline the send will fail — add the asset in Freighter (Manage Assets) first.`
+            : `${token.symbol} needs a trustline on both wallets. XLM needs none.`}
         </p>
       )}
 

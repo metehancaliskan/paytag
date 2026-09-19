@@ -181,7 +181,7 @@ function PaymentRow({
       setHash(res.hash);
       onRefunded();
     } catch (e) {
-      setError(describeEscrowError(e));
+      setError(describeEscrowError(e, "refund"));
     } finally {
       setBusy(null);
     }

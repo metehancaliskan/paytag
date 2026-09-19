@@ -231,7 +231,7 @@ export default function ClaimPanel({
       // sitting there.
       router.refresh();
     } catch (e) {
-      setError({ hex, text: describeEscrowError(e) });
+      setError({ hex, text: describeEscrowError(e, "claim") });
     } finally {
       setBusy(null);
     }
