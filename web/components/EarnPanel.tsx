@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
+import Image from "next/image";
 import { useWallet } from "./WalletProvider";
 import { useLiveRewards } from "./useLiveRewards";
 import { AssetMark } from "./icons";
@@ -186,21 +187,33 @@ export default function EarnPanel() {
 
   return (
     <div className="card p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-semibold">Put it to work</h2>
-        <span className="text-xs text-mute">
-          via{" "}
-          <a
-            className="link"
-            href={explorerContract(BLEND_POOL_ID)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {BLEND_POOL_NAME}
-          </a>
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 className="flex items-center gap-2.5 font-semibold">
+          Put it to work on
+          {/* Blend's own wordmark, used as published rather than redrawn or
+              recoloured — their media kit asks for exactly that, and it is the
+              same argument as the asset marks: whose protocol this is should
+              not be approximate. Set off from the words beside it, also as
+              asked. */}
+          <Image
+            src="/brand/blend-wordmark.png"
+            alt="Blend"
+            width={1200}
+            height={360}
+            className="h-[22px] w-auto"
+            unoptimized
+          />
+        </h2>
+        <a
+          className="link text-xs"
+          href={explorerContract(BLEND_POOL_ID)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {BLEND_POOL_NAME}
+        </a>
       </div>
-      <p className="mt-1 text-sm text-dim">
+      <p className="mt-1.5 text-sm text-dim">
         Lend what you claimed. Borrowers pay interest for it, the pool pays BLND
         on top, and you can take it back whenever you like.
       </p>

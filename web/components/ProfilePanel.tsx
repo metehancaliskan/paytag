@@ -13,6 +13,7 @@ import { describeEscrowError } from "@/lib/stellar";
 import { type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits } from "@/lib/format";
 import { groupByAsset, named, unnamed } from "@/lib/assets";
+import { AssetMark } from "./icons";
 import { DEFAULT_TOKEN } from "@/lib/config";
 
 type Props = { handle: string; identityHex: string; kind: IdentityKind };
@@ -67,10 +68,6 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
   // which named no amount and so could not be read as money.
   const assets = named(groupByAsset(pending));
   const strangers = unnamed(groupByAsset(pending));
-  const lead = assets[0] ?? null;
-  const rest = assets.slice(1);
-  const headlineAsset = lead?.token ?? DEFAULT_TOKEN;
-  const total = lead?.units ?? 0n;
 
   return (
     <div className="space-y-6">
@@ -89,48 +86,50 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
         </div>
 
         {payments === null ? (
-          <div className="mt-2 skeleton h-9 w-40" />
-        ) : (
+          <div className="mt-3 skeleton h-10 w-44" />
+        ) : loadError ? (
           // A failed read must not render as a confident zero — "0 USDC in
           // escrow" and "we could not ask" are very different facts.
-          <p
-            className="num mt-1 text-3xl font-bold tracking-tight text-accent-text"
-            title={
-              loadError
-                ? undefined
-                : `${fromUnits(total, headlineAsset.decimals)} ${headlineAsset.symbol}`
-            }
-          >
-            {loadError ? (
-              <span className="text-mute">?</span>
-            ) : (
-              displayUnits(total, headlineAsset.decimals)
-            )}{" "}
+          <p className="num mt-2 text-3xl font-bold tracking-tight text-mute">
+            ?
+          </p>
+        ) : assets.length === 0 ? (
+          <p className="num mt-2 flex items-center gap-2.5 text-3xl font-bold tracking-tight text-mute">
+            <AssetMark asset="XLM" size={28} className="opacity-40" />0{" "}
             <span className="text-lg font-semibold text-dim">
-              {headlineAsset.symbol}
+              {DEFAULT_TOKEN.symbol}
             </span>
           </p>
-        )}
-
-        {/* Every other asset waiting on this handle, as an amount rather than
-            a tally. The escrow holds whatever it was sent; a screen that counts
-            those payments without naming them tells the sender that something
-            is there and refuses to say what. */}
-        {rest.length > 0 && !loadError && (
-          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-            {rest.map((a) => (
-              <span
-                key={a.contractId}
-                className="num text-sm font-semibold text-dim"
-                title={`${fromUnits(a.units, a.token.decimals)} ${a.token.symbol}`}
-              >
-                {displayUnits(a.units, a.token.decimals)}{" "}
-                <span className="text-xs font-semibold text-mute">
-                  {a.token.symbol}
+        ) : (
+          /* One line per asset, each with its own mark. The escrow holds
+             whatever it was sent, and a screen that leads with one number and
+             files the others under "2 in another asset" is telling the sender
+             that something is there while refusing to say what. */
+          <ul className="mt-2.5 space-y-2">
+            {assets.map((a, i) => (
+              <li key={a.contractId} className="flex items-center gap-2.5">
+                <AssetMark
+                  asset={a.token.key === "XLM" ? "XLM" : "USDC"}
+                  size={i === 0 ? 28 : 22}
+                />
+                <span
+                  className={`num font-bold tracking-tight text-accent-text ${
+                    i === 0 ? "text-3xl" : "text-xl"
+                  }`}
+                  title={`${fromUnits(a.units, a.token.decimals)} ${a.token.symbol}`}
+                >
+                  {displayUnits(a.units, a.token.decimals)}
+                  <span
+                    className={`ml-1.5 font-semibold text-dim ${
+                      i === 0 ? "text-lg" : "text-sm"
+                    }`}
+                  >
+                    {a.token.symbol}
+                  </span>
                 </span>
-              </span>
+              </li>
             ))}
-          </p>
+          </ul>
         )}
 
         <p className="mt-1 text-sm text-mute">
