@@ -27,6 +27,7 @@ import { priceFor, trimAmount, type Quote } from "@/lib/anchor/sep38";
 import {
   depositLimits,
   describeStatus,
+  isFinal,
   getTransaction,
   pollTransaction,
   simulateBankTransfer,
@@ -93,6 +94,14 @@ export default function TopUpPanel() {
     null,
   );
   const [tx, setTx] = useState<AnchorTransaction | null>(null);
+  /**
+   * We stopped watching before the anchor finished.
+   *
+   * Polling has a budget, and an anchor that is slow today is not an anchor
+   * that has failed. Saying so is better than a status line that quietly stops
+   * updating, which reads as a lost transfer.
+   */
+  const [stalled, setStalled] = useState(false);
   const [trusted, setTrusted] = useState<boolean | null>(null);
 
   const amountId = useId();
@@ -273,6 +282,7 @@ export default function TopUpPanel() {
 
   async function watch(token: TokenGetter) {
     if (!anchor || !instructions) return;
+    setStalled(false);
     const final = await pollTransaction(
       anchor,
       token,
@@ -283,7 +293,9 @@ export default function TopUpPanel() {
     if (final.status === "completed") {
       setStage("done");
       void checkTrustline();
+      return;
     }
+    if (!isFinal(final.status) && !stopped.current) setStalled(true);
   }
 
   async function refresh() {
@@ -474,6 +486,14 @@ export default function TopUpPanel() {
             {/* The anchor's own words first. It knows why it is waiting and we
                 only know the status name. */}
             {tx.message ?? describeStatus(tx.status)}
+            {stalled && (
+              <>
+                {" "}
+                The anchor has not finished after three minutes. Nothing is
+                lost — it is still working, or it is having a bad day. Check
+                again whenever you like.
+              </>
+            )}
             {tx.stellarTransactionId && (
               <>
                 {" · "}
