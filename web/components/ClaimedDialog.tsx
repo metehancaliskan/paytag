@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import Modal from "./Modal";
 import CopyButton from "./CopyButton";
+import { useAnchor } from "./useAnchor";
 import { kindUrlPrefix, type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits, shortAddr } from "@/lib/format";
 import { explorerTx } from "@/lib/config";
@@ -18,6 +20,8 @@ export type Claimed = {
    */
   symbol: string;
   decimals: number;
+  /** Which token contract this was, so the receipt can offer what comes next. */
+  contractId: string;
   to: string;
   /** WHICH handle this claim emptied. The page has two, and they are separate
    *  escrows — a result that does not name one is a result about neither. */
@@ -40,6 +44,14 @@ export default function ClaimedDialog({
   claimed: Claimed | null;
   onClose: () => void;
 }) {
+  // Offered only when the asset that just landed is the one the anchor ramps.
+  // A receipt for XLM has nothing to say about a bank account, and a button
+  // that leads to "you cannot cash this out" is worse than no button.
+  const { anchor } = useAnchor();
+  const cashable =
+    anchor !== null && claimed !== null &&
+    anchor.token.contractId === claimed.contractId;
+
   return (
     <Modal open={claimed !== null} onClose={onClose} labelledBy="claimed-title">
       {claimed && (
@@ -95,6 +107,16 @@ export default function ClaimedDialog({
                 label="Copy hash"
                 className="btn btn-quiet btn-sm"
               />
+              {cashable && (
+                <Link
+                  className="btn btn-ghost btn-sm"
+                  href={`/cashout?amount=${encodeURIComponent(
+                    fromUnits(claimed.units, claimed.decimals),
+                  )}`}
+                >
+                  Cash out to a bank
+                </Link>
+              )}
               <button
                 type="button"
                 className="btn btn-primary btn-sm ml-auto"

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import ClaimPanel from "@/components/ClaimPanel";
+import { ANCHOR_ENABLED, FIAT_CODE } from "@/lib/anchor/config";
 import { KIND_SLUG, isKindSlug } from "@/lib/identity";
 
 export const metadata: Metadata = {
@@ -35,6 +37,19 @@ export default async function ClaimPage({
         hintKind={hintKind}
         authError={authError}
       />
+
+      {/* The step after this one, named before the reader has to go looking
+          for it. Claiming leaves a balance on a network; this is where it
+          stops being that. */}
+      {ANCHOR_ENABLED && (
+        <p className="px-1 text-xs text-mute">
+          Already claimed?{" "}
+          <Link className="link" href="/cashout">
+            Cash out to {FIAT_CODE} in your bank
+          </Link>
+          .
+        </p>
+      )}
     </div>
   );
 }

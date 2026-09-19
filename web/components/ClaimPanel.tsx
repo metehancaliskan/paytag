@@ -222,6 +222,7 @@ export default function ClaimPanel({
         // confident lie about which money had just landed.
         symbol: asset.token.symbol,
         decimals: asset.token.decimals,
+        contractId: asset.contractId,
         to,
         kind,
         handle,

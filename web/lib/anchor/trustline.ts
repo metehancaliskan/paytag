@@ -53,6 +53,33 @@ export async function hasTrustline(
   }
 }
 
+/**
+ * How much of the asset this account holds, as a decimal string.
+ *
+ * `null` for "no trustline, no account, or could not ask" — the three are not
+ * worth telling apart at the call site, because all three mean the same thing
+ * to a screen offering to cash out: there is nothing to offer yet.
+ */
+export async function assetBalance(
+  account: string,
+  code: string,
+  issuer: string,
+): Promise<string | null> {
+  try {
+    const acc = await horizon().loadAccount(account);
+    const line = acc.balances.find(
+      (b) =>
+        "asset_code" in b &&
+        b.asset_code === code &&
+        "asset_issuer" in b &&
+        b.asset_issuer === issuer,
+    );
+    return line?.balance ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export type SignXdr = (xdr: string) => Promise<string>;
 
 /**

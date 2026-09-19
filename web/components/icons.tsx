@@ -126,12 +126,15 @@ export function CheckMark({ className, size = 12 }: IconProps) {
  * this file — an inline shape follows the theme, needs no second asset for dark
  * mode, and cannot fail to load beside a number that means money.
  *
- * They are typographic marks in each asset's own colour, not the projects'
- * trademarked logos: a redrawn logo that is slightly wrong looks worse than an
- * honest glyph, and a payment screen is the wrong place to be approximate about
- * whose asset this is. The colours are hardcoded rather than themed because
- * they identify the asset, not the interface — USDC is that blue in both
- * themes, the way a bank card is the same colour in any light.
+ * XLM is Stellar's own mark — the ring cut by two bars — drawn to its actual
+ * geometry rather than approximated: a payment screen is the wrong place to be
+ * vague about whose asset this is, and the first version of this file used a
+ * four-pointed star that is not Stellar's logo at all. The dollar and lira are
+ * currency glyphs, which is what those two currencies are identified by.
+ *
+ * The colours are hardcoded rather than themed because they identify the asset,
+ * not the interface — USDC is that blue in both themes, the way a bank card is
+ * the same colour in any light.
  */
 export function AssetMark({
   asset,
@@ -162,15 +165,30 @@ export function AssetMark({
       }}
     >
       {asset === "XLM" ? (
-        // A four-pointed star: the shape lumens are written with, and the one
-        // part of Stellar's mark that is a glyph rather than a logo.
+        // Stellar's mark: a ring with two parallel bars cut through it, the
+        // whole thing tilted. Built from four stroked arcs and two bars rather
+        // than one traced path — the arcs stop exactly where the bars pass, and
+        // the two small nubs left at the sides are part of the shape, not a
+        // rendering accident.
         <svg
           viewBox="0 0 24 24"
-          width={size * 0.56}
-          height={size * 0.56}
-          fill="currentColor"
+          width={size * 0.62}
+          height={size * 0.62}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
         >
-          <path d="M12 1.5c.5 4.6 1.4 6.9 3.4 8.6 1.7 1.4 3.9 1.9 7.1 2.4-4.6.5-6.9 1.4-8.6 3.4-1.4 1.7-1.9 3.9-2.4 7.1-.5-4.6-1.4-6.9-3.4-8.6-1.7-1.4-3.9-1.9-7.1-2.4 4.6-.5 6.9-1.4 8.6-3.4C11 7.4 11.5 5.2 12 1.5Z" />
+          <g transform="rotate(-27 12 12)">
+            {/* over the top */}
+            <path d="M4.76 5.85A9.5 9.5 0 0 1 19.24 5.85" />
+            {/* under the bottom */}
+            <path d="M19.24 18.15A9.5 9.5 0 0 1 4.76 18.15" />
+            {/* the two nubs the bars leave behind, left and right */}
+            <path d="M21.44 10.95A9.5 9.5 0 0 1 21.44 13.05" />
+            <path d="M2.56 13.05A9.5 9.5 0 0 1 2.56 10.95" />
+            <rect x="-6" y="6.95" width="36" height="2.9" fill="currentColor" stroke="none" />
+            <rect x="-6" y="14.15" width="36" height="2.9" fill="currentColor" stroke="none" />
+          </g>
         </svg>
       ) : (
         <span

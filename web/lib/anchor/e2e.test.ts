@@ -8,11 +8,14 @@ import {
   pollTransaction,
   simulateBankTransfer,
   startDeposit,
+  startWithdraw,
 } from "./sep6";
-import { hasTrustline, openTrustline } from "./trustline";
+import { assetBalance, hasTrustline, openTrustline } from "./trustline";
+import { payAnchor } from "./payment";
 
 /**
- * The on-ramp, against the real sandbox anchor. OFF by default.
+ * The whole ramp, both directions, against the real sandbox anchor. OFF by
+ * default.
  *
  * `ANCHOR_E2E=1 pnpm test` runs it. CI does not, and neither does an ordinary
  * `pnpm test`, for three reasons: it needs the network, it creates and funds a
@@ -24,17 +27,19 @@ import { hasTrustline, openTrustline } from "./trustline";
  * translation of the protocol, and none of them would notice if the anchor
  * changed the shape of a response or if a request went out with a parameter in
  * the wrong place. This one walks the whole path a person walks — discover,
- * authenticate, allow the asset, deposit, simulate the bank, wait — with a
- * keypair standing in for the wallet.
+ * authenticate, allow the asset, deposit, simulate the bank, wait, then send
+ * it back out with a memo and wait again — with a keypair standing in for the
+ * wallet.
  *
- * It asserts the thing that actually matters at the end: USDC arrived.
+ * It asserts the two things that actually matter: the USDC arrived, and the
+ * lira came back.
  */
 
 const RUN = process.env.ANCHOR_E2E === "1";
 
-describe.skipIf(!RUN)("the on-ramp, end to end", () => {
+describe.skipIf(!RUN)("the fiat ramp, end to end", () => {
   it(
-    "turns a simulated lira transfer into USDC in a fresh wallet",
+    "takes lira in and pays lira back out, through a fresh wallet",
     { timeout: 180_000 },
     async () => {
       const kp = Keypair.random();
@@ -107,9 +112,53 @@ describe.skipIf(!RUN)("the on-ramp, end to end", () => {
       expect(final.amountOutAsset).toContain(anchor.assetIssuer);
 
       // And the money is really there, not just claimed to be.
-      expect(await hasTrustline(kp.publicKey(), "USDC", anchor.assetIssuer)).toBe(
-        true,
+      const balance = await assetBalance(
+        kp.publicKey(),
+        "USDC",
+        anchor.assetIssuer,
       );
+      expect(Number(balance)).toBeGreaterThan(0);
+
+      // ------------------------------------------------------ and back out
+
+      // The off-ramp, on the same account and with the money the on-ramp just
+      // put there. Run as one test rather than two because that is the only
+      // honest way to test it: a withdrawal needs an asset balance, and an
+      // asset balance is what the deposit produces.
+      const out = "1";
+      const withdraw = await startWithdraw(anchor, token, out);
+      expect(withdraw.accountId).toBeTruthy();
+      // The memo is the whole reason this is not just a payment.
+      expect(withdraw.memo).toBeTruthy();
+      expect(withdraw.memoType).toBe("id");
+
+      const hash = await payAnchor(
+        {
+          from: kp.publicKey(),
+          destination: withdraw.accountId,
+          code: anchor.assetCode,
+          issuer: anchor.assetIssuer,
+          amount: out,
+          memo: withdraw.memo,
+          memoType: withdraw.memoType,
+        },
+        sign,
+      );
+      expect(hash).toHaveLength(64);
+
+      const paidOut = await pollTransaction(
+        anchor,
+        token,
+        withdraw.id,
+        () => {},
+      );
+
+      expect(paidOut.status).toBe("completed");
+      // Lira on the way out, the asset on the way in: the mirror of the
+      // deposit, and the assertion that catches the two being swapped.
+      expect(paidOut.amountInAsset).toContain(anchor.assetIssuer);
+      expect(paidOut.amountOutAsset).toBe("iso4217:TRY");
+      expect(Number(paidOut.amountOut)).toBeGreaterThan(0);
     },
   );
 });

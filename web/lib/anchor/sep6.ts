@@ -100,6 +100,81 @@ export async function startDeposit(
   };
 }
 
+export type WithdrawInstructions = {
+  id: string;
+  /** Where the asset has to be sent. The anchor's own Stellar account. */
+  accountId: string;
+  /**
+   * The memo, and the reason the off-ramp is not just a payment.
+   *
+   * Every customer of the anchor pays into the SAME account, so the memo is
+   * the only thing that says whose transfer this is. A payment that arrives
+   * without it, or with the wrong one, is money the anchor cannot attribute.
+   */
+  memo: string;
+  memoType: string;
+  moreInfoUrl: string | null;
+};
+
+/** What the anchor will take back, and between which amounts. */
+export async function withdrawLimits(anchor: AnchorInfo): Promise<Sep6Limits> {
+  const res = await fetch(`${anchor.transferServer}/info`);
+  const body = (await res.json().catch(() => ({}))) as {
+    withdraw?: Record<
+      string,
+      { min_amount?: number; max_amount?: number; fee_percent?: number }
+    >;
+  };
+  const w = body.withdraw?.[anchor.assetCode];
+  return {
+    min: w?.min_amount ?? null,
+    max: w?.max_amount ?? null,
+    feePercent: w?.fee_percent ?? null,
+  };
+}
+
+/**
+ * Asks the anchor to expect the asset back, and pay out lira for it.
+ *
+ * `amount` is in the STELLAR asset here, not the fiat — it is what leaves the
+ * wallet. The mirror of `startDeposit`, where the amount is what leaves the
+ * bank. Getting these two the wrong way round is the easiest mistake in a SEP
+ * integration and the hardest to see: both are numbers, and both endpoints
+ * accept either without complaint.
+ */
+export async function startWithdraw(
+  anchor: AnchorInfo,
+  token: string,
+  assetAmount: string,
+): Promise<WithdrawInstructions> {
+  const url =
+    `${anchor.transferServer}/withdraw?` +
+    new URLSearchParams({
+      asset_code: anchor.assetCode,
+      type: "bank_account",
+      amount: assetAmount,
+    });
+
+  const body = await anchorJson(url, token, "start the withdrawal");
+
+  const id = str(body.id);
+  const accountId = str(body.account_id);
+  const memo = str(body.memo);
+  if (!id || !accountId || !memo) {
+    throw new Error(
+      "The anchor did not say where to send the money. Nothing was sent.",
+    );
+  }
+
+  return {
+    id,
+    accountId,
+    memo,
+    memoType: str(body.memo_type) ?? "id",
+    moreInfoUrl: str(body.more_info_url),
+  };
+}
+
 export async function getTransaction(
   anchor: AnchorInfo,
   token: string,
@@ -129,6 +204,11 @@ export async function getTransaction(
 
 /**
  * SANDBOX ONLY. Pretends the bank transfer arrived.
+ *
+ * Deposits only — the off-ramp needs no equivalent, because its trigger is a
+ * real payment on a real (test) network. That asymmetry is worth noticing: the
+ * half of the ramp that is simulated here is exactly the half a real anchor
+ * replaces with a bank, and the Stellar half is already the production one.
  *
  * On a real anchor this call does not exist and this step is a person opening
  * their banking app. Kept as its own function, with this comment, so nobody
