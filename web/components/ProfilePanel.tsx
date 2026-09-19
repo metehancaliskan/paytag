@@ -101,29 +101,23 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
             </span>
           </p>
         ) : (
-          /* One line per asset, each with its own mark. The escrow holds
-             whatever it was sent, and a screen that leads with one number and
-             files the others under "2 in another asset" is telling the sender
-             that something is there while refusing to say what. */
-          <ul className="mt-2.5 space-y-2">
-            {assets.map((a, i) => (
+          /* Every asset the same size and on the same line. The escrow holds
+             whatever it was sent; ranking one of them bigger than the others
+             says the small one matters less, and to whoever is owed it, it
+             does not. They wrap onto a second line rather than shrink. */
+          <ul className="mt-2.5 flex flex-wrap items-center gap-x-7 gap-y-2.5">
+            {assets.map((a) => (
               <li key={a.contractId} className="flex items-center gap-2.5">
                 <AssetMark
                   asset={a.token.key === "XLM" ? "XLM" : "USDC"}
-                  size={i === 0 ? 28 : 22}
+                  size={28}
                 />
                 <span
-                  className={`num font-bold tracking-tight text-accent-text ${
-                    i === 0 ? "text-3xl" : "text-xl"
-                  }`}
+                  className="num text-3xl font-bold tracking-tight text-accent-text"
                   title={`${fromUnits(a.units, a.token.decimals)} ${a.token.symbol}`}
                 >
                   {displayUnits(a.units, a.token.decimals)}
-                  <span
-                    className={`ml-1.5 font-semibold text-dim ${
-                      i === 0 ? "text-lg" : "text-sm"
-                    }`}
-                  >
+                  <span className="ml-1.5 text-lg font-semibold text-dim">
                     {a.token.symbol}
                   </span>
                 </span>
