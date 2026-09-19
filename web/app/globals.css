@@ -637,6 +637,41 @@ body {
     }
   }
 
+  /* A digit that has just turned over.
+     
+     Used on a figure that changes about twice a second. It has to be visible
+     enough that the movement is the point and quiet enough that the number
+     stays readable while it moves — so: a short drop into place with the
+     accent glowing behind it, gone in under half a second. */
+  .digit-tick {
+    display: inline-block;
+    animation: digit-tick 420ms ease-out;
+  }
+
+  @keyframes digit-tick {
+    0% {
+      transform: translateY(-0.18em);
+      opacity: 0.3;
+      text-shadow: 0 0 14px color-mix(in oklab, var(--accent) 75%, transparent);
+    }
+    55% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+      text-shadow: none;
+    }
+  }
+
+  /* Somebody who has asked for less motion is not asking for a number that
+     jitters twice a second. It still updates; it just stops moving. */
+  @media (prefers-reduced-motion: reduce) {
+    .digit-tick {
+      animation: none;
+    }
+  }
+
   /* Keyboard users land here first; invisible until focused. */
   .skip-link {
     position: absolute;

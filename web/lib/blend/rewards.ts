@@ -55,3 +55,24 @@ export function project(
   const gained = BigInt(Math.floor(rate * ahead));
   return sample.value + (gained > 0n ? gained : 0n);
 }
+
+/**
+ * The first character at which two renderings of a number differ.
+ *
+ * Used to animate only what actually moved. A reward that goes from
+ * `0.0001381` to `0.0001384` changed one digit, and lighting up the whole
+ * figure for it would be a flash on every frame — the eye stops reading a
+ * number that never sits still. Lighting up the one digit that turned over
+ * draws the eye to the movement itself.
+ *
+ * Returns the length of the shorter string when one is a prefix of the other,
+ * and `0` when they differ from the first character — a number that grew a
+ * digit has changed shape, not just value, and animating all of it is right.
+ */
+export function changedFrom(previous: string, next: string): number {
+  if (previous.length !== next.length) return 0;
+  for (let i = 0; i < next.length; i++) {
+    if (previous[i] !== next[i]) return i;
+  }
+  return next.length;
+}

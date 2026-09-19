@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { project, ratePerMs, type Sample } from "./rewards";
+import { changedFrom, project, ratePerMs, type Sample } from "./rewards";
 
 /**
  * Drawing a number between the moments it can be measured.
@@ -60,5 +60,22 @@ describe("project", () => {
 
   it("floors, so it never rounds up into money that is not there", () => {
     expect(project(at(0n, 0), 0.4, 1)).toBe(0n);
+  });
+});
+
+describe("changedFrom", () => {
+  it("finds the digit that turned over", () => {
+    expect(changedFrom("0.0001381", "0.0001384")).toBe(8);
+    expect(changedFrom("0.0001389", "0.0001390")).toBe(7);
+  });
+
+  it("says nothing changed when nothing did", () => {
+    expect(changedFrom("0.0001381", "0.0001381")).toBe(9);
+  });
+
+  it("treats a number that grew a digit as changed throughout", () => {
+    // 0.9999999 -> 1.0000001 is not one digit moving, it is a new shape.
+    expect(changedFrom("0.9999999", "1.0000001")).toBe(0);
+    expect(changedFrom("", "0.1")).toBe(0);
   });
 });

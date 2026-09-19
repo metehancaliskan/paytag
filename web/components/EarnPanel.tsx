@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import Image from "next/image";
 import { useWallet } from "./WalletProvider";
 import { useLiveRewards } from "./useLiveRewards";
+import LiveAmount from "./LiveAmount";
 import { AssetMark } from "./icons";
 import { sign, networkMismatch } from "@/lib/freighter";
 import { submitSigned, tokenBalance } from "@/lib/contract";
@@ -380,9 +381,10 @@ export default function EarnPanel() {
                     ones beside it. Seven decimal places because that is where
                     the movement is at these amounts — rounding it to two would
                     show a number that never changes. */}
-                <span className="num font-bold tabular-nums text-accent-text">
-                  {fromUnits(rewards, 7)}
-                </span>{" "}
+                <LiveAmount
+                  value={fromUnits(rewards, 7)}
+                  className="num text-base font-bold tabular-nums text-accent-text"
+                />{" "}
                 <span className="text-xs font-semibold text-dim">BLND</span>
                 <span className="mt-0.5 flex items-center gap-1.5 text-xs text-mute">
                   {claimable > 0n && (
