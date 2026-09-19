@@ -32,6 +32,10 @@ export default defineConfig({
       // The USDC we issued ourselves, which earlier payments are still in.
       NEXT_PUBLIC_USDC_LEGACY_SAC_ID:
         "CBU7HRUSXSVPI7QHA73G67UDRQTKSEOICFHWOMWSPOZ2S3R3DIWUCPKI",
+      // The anchor. No test reaches it — the network half is the anchor's
+      // behaviour, not ours — but the asset check that guards the ramp is
+      // arithmetic over these values, and it is tested.
+      NEXT_PUBLIC_ANCHOR_HOME_DOMAIN: "tr-mock-anchor.fly.dev",
       // The real testnet native SAC, the same value CI builds with. No test
       // reads the chain, so any non-empty value would do, but a wrong one here
       // would be a wrong answer waiting for the first test that does.

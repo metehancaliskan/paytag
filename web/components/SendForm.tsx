@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import CopyButton from "./CopyButton";
@@ -23,6 +24,7 @@ import {
   usdGlance,
 } from "@/lib/format";
 import { unitsToCents } from "@/lib/price";
+import { ANCHOR_ENABLED, FIAT_CODE } from "@/lib/anchor/config";
 import {
   DEFAULT_TOKEN,
   EXPIRY_CHOICES,
@@ -425,6 +427,19 @@ export default function SendForm({
           {busy}
         </span>
       </div>
+
+      {/* The way out of an empty balance, offered where the emptiness is felt.
+          Not a fourth item in the navigation: adding money is something you
+          need at a moment, not a place you go. */}
+      {ANCHOR_ENABLED && token.needsTrustline && address && (balance ?? 0n) === 0n && (
+        <p className="mt-3 text-xs text-mute">
+          No {token.symbol} in this wallet.{" "}
+          <Link className="link" href="/topup">
+            Add some with a {FIAT_CODE} bank transfer
+          </Link>
+          .
+        </p>
+      )}
 
       {token.needsTrustline && (
         <p className="mt-3 text-xs text-mute">
