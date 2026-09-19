@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import { useWallet } from "./WalletProvider";
+import { useLiveRewards } from "./useLiveRewards";
 import { AssetMark } from "./icons";
 import { sign, networkMismatch } from "@/lib/freighter";
 import { submitSigned, tokenBalance } from "@/lib/contract";
@@ -10,7 +11,6 @@ import { displayUnits, fromUnits, toUnits } from "@/lib/format";
 import { TOKENS, explorerContract, explorerTx, type TokenConfig } from "@/lib/config";
 import { BLEND_ENABLED, BLEND_POOL_ID, BLEND_POOL_NAME } from "@/lib/blend/config";
 import {
-  accruedRewards,
   buildClaim,
   buildSupply,
   buildWithdraw,
@@ -60,7 +60,6 @@ export default function EarnPanel() {
   const { address } = useWallet();
 
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [rewards, setRewards] = useState<bigint>(0n);
   const [picked, setPicked] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -86,17 +85,13 @@ export default function EarnPanel() {
         const reserves = await Promise.all(
           mine.map((t) => loadReserve(t.contractId, assets.indexOf(t.contractId))),
         );
-        const [positions, balances, accrued] = await Promise.all([
+        const [positions, balances] = await Promise.all([
           loadPositions(address, reserves),
           Promise.all(
             mine.map((t) =>
               tokenBalance(address, t.contractId).catch(() => 0n),
             ),
           ),
-          accruedRewards(
-            address,
-            reserves.map((r) => supplyEmissionId(r.index)),
-          ).catch(() => 0n),
         ]);
         if (!alive) return;
 
@@ -117,7 +112,6 @@ export default function EarnPanel() {
             };
           }),
         );
-        setRewards(accrued);
         setError(null);
       } catch (e) {
         if (alive) setError(describeEscrowError(e));
@@ -130,6 +124,21 @@ export default function EarnPanel() {
   }, [address, tick]);
 
   const row = rows?.find((r) => r.token.key === picked) ?? rows?.[0] ?? null;
+
+  /**
+   * The reward, redrawn while you watch it.
+   *
+   * BLND accrues every ledger and the amounts here are small enough that the
+   * seventh decimal place moves about once a second — which is exactly the
+   * scale at which a static number looks broken and a moving one tells the
+   * truth. `tick` is passed so that a claim, which resets the counter to zero,
+   * is picked up immediately rather than up to five seconds later.
+   */
+  const { shown: rewards, measured: claimable } = useLiveRewards(
+    address,
+    (rows ?? []).map((r) => supplyEmissionId(r.reserve.index)),
+    tick,
+  );
 
   async function run(
     what: string,
@@ -351,18 +360,28 @@ export default function EarnPanel() {
           {/* Rewards are a separate token on a separate clock, so they get a
               separate line rather than being folded into a balance they are
               not part of. */}
-          {(rewards > 0n || anyEarning) && (
+          {(claimable > 0n || anyEarning) && (
             <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-line p-3">
               <span className="text-sm">
-                <span className="num font-bold text-accent-text">
+                {/* Tabular figures, so a digit changing does not shuffle the
+                    ones beside it. Seven decimal places because that is where
+                    the movement is at these amounts — rounding it to two would
+                    show a number that never changes. */}
+                <span className="num font-bold tabular-nums text-accent-text">
                   {fromUnits(rewards, 7)}
                 </span>{" "}
                 <span className="text-xs font-semibold text-dim">BLND</span>
-                <span className="mt-0.5 block text-xs text-mute">
-                  earned so far, on top of the interest
+                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-mute">
+                  {claimable > 0n && (
+                    <span
+                      aria-hidden
+                      className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
+                    />
+                  )}
+                  earning right now, on top of the interest
                 </span>
               </span>
-              {rewards > 0n && (
+              {claimable > 0n && (
                 <button
                   className="btn btn-ghost btn-sm ml-auto"
                   disabled={busy !== null}
