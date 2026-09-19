@@ -40,6 +40,10 @@ export default defineConfig({
       // to get wrong is tested, the calls are not.
       NEXT_PUBLIC_BLEND_POOL_ID:
         "CAPBMXIQTICKWFPWFDJWMAKBXBPJZUKLNONQH3MLPLLBKQ643CYN5PRW",
+      NEXT_PUBLIC_XOXNO_CONTROLLER:
+        "CCXRWJ6SIU2WPFEGLFGJVITPL57QAYIMIO6OAM2NBGNDQSSCK2FFV3F3",
+      NEXT_PUBLIC_XOXNO_POSITION_NFT:
+        "CDVN5JU675MEDPVRPCYC45AHFC275UH57WEU5OTFE4WFGZBNN7HTLPSY",
       // The real testnet native SAC, the same value CI builds with. No test
       // reads the chain, so any non-empty value would do, but a wrong one here
       // would be a wrong answer waiting for the first test that does.
