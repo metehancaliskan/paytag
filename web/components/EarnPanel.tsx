@@ -317,9 +317,9 @@ export default function EarnPanel() {
                 <Image
                   src="/brand/xoxno-wordmark.jpg"
                   alt="XOXNO"
-                  width={460}
-                  height={150}
-                  className="h-[15px] w-auto mix-blend-screen"
+                  width={306}
+                  height={66}
+                  className="h-[13px] w-auto mix-blend-screen"
                   unoptimized
                 />
               )}
