@@ -4,11 +4,20 @@ import Modal from "./Modal";
 import CopyButton from "./CopyButton";
 import { kindUrlPrefix, type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits, shortAddr } from "@/lib/format";
-import { DEFAULT_TOKEN, explorerTx } from "@/lib/config";
+import { explorerTx } from "@/lib/config";
 
 export type Claimed = {
   hash: string;
   units: bigint;
+  /**
+   * WHICH asset this receipt is for.
+   *
+   * It used to print the deployment's default symbol whatever had moved, which
+   * was harmless while only one asset could be claimed and a confident lie the
+   * moment a second one could.
+   */
+  symbol: string;
+  decimals: number;
   to: string;
   /** WHICH handle this claim emptied. The page has two, and they are separate
    *  escrows — a result that does not name one is a result about neither. */
@@ -47,11 +56,11 @@ export default function ClaimedDialog({
                 <h2 id="claimed-title" className="font-bold">
                   <span
                     className="num"
-                    title={`${fromUnits(claimed.units)} ${DEFAULT_TOKEN.symbol}`}
+                    title={`${fromUnits(claimed.units, claimed.decimals)} ${claimed.symbol}`}
                   >
-                    {displayUnits(claimed.units)}
+                    {displayUnits(claimed.units, claimed.decimals)}
                   </span>{" "}
-                  {DEFAULT_TOKEN.symbol} is yours.
+                  {claimed.symbol} is yours.
                 </h2>
                 <p className="mt-1 text-sm text-mute">
                   From{" "}

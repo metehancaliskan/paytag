@@ -52,7 +52,7 @@ export const ESCROW_ID = need(
  * one; it is derived from the network passphrase and differs per network:
  *   stellar contract id asset --asset native --network testnet
  */
-export type TokenKey = "XLM" | "USDC";
+export type TokenKey = "XLM" | "USDC" | "USDC_LEGACY";
 
 export type TokenConfig = {
   key: TokenKey;
@@ -72,8 +72,27 @@ export const XLM_SAC_ID = need(
   "NEXT_PUBLIC_XLM_SAC_ID",
 );
 
-/** Optional: leave the variable empty and the UI simply does not offer USDC. */
+/**
+ * Optional: leave the variable empty and the UI simply does not offer USDC.
+ *
+ * It must be the USDC the ANCHOR ramps. An asset on Stellar is its code and its
+ * issuer together, so two USDCs from two issuers are two unrelated assets: pay
+ * someone in the wrong one and the off-ramp has nothing it can take.
+ */
 export const USDC_SAC_ID = (process.env.NEXT_PUBLIC_USDC_SAC_ID ?? "").trim();
+
+/**
+ * An earlier USDC, kept only so history stays readable.
+ *
+ * Payments on the deployed contract are denominated in a USDC we issued
+ * ourselves, from before an anchor was in the picture. No anchor ramps it, so
+ * it is never offered to a sender — sending it would create a balance with
+ * nowhere to go. But the escrow still holds some, and an escrow screen that
+ * cannot name what it is holding prints a number with no unit beside it.
+ */
+export const USDC_LEGACY_SAC_ID = (
+  process.env.NEXT_PUBLIC_USDC_LEGACY_SAC_ID ?? ""
+).trim();
 
 export const TOKENS: TokenConfig[] = [
   {
@@ -96,28 +115,48 @@ export const TOKENS: TokenConfig[] = [
         },
       ]
     : []),
+  ...(USDC_LEGACY_SAC_ID && USDC_LEGACY_SAC_ID !== USDC_SAC_ID
+    ? [
+        {
+          // "(old)" in the symbol on purpose. Both assets are called USDC on
+          // chain and the difference between them is an issuer nobody reads, so
+          // two lines saying plain "USDC" in an escrow breakdown would look like
+          // a bug in our arithmetic rather than two genuinely separate holdings.
+          key: "USDC_LEGACY" as const,
+          symbol: "USDC (old)",
+          contractId: USDC_LEGACY_SAC_ID,
+          decimals: 7,
+          needsTrustline: true,
+          isDollarPegged: true,
+        },
+      ]
+    : []),
 ];
 
 export const DEFAULT_TOKEN: TokenConfig = TOKENS[0];
 
 /**
- * What the send form OFFERS, which is deliberately narrower than what the app
- * can name.
+ * What the send form OFFERS.
  *
- * XLM only. An asset picker with two entries asks every sender a question that
- * has one right answer for almost all of them, on the screen where a wrong
- * answer costs the most: USDC cannot be held by a wallet that has not opened a
- * trustline for it, so choosing it can leave the money sitting behind a wall
- * the recipient has never heard of. XLM has no such wall.
+ * Everything this deployment can name. It was XLM only, and the reason was a
+ * real one: USDC cannot be held by a wallet that has not opened a trustline for
+ * it, so offering it left money sitting behind a wall the recipient had never
+ * heard of, with nothing on the other side to make the wall worth climbing.
  *
- * `TOKENS` still lists USDC, and that is the point of keeping the two apart.
- * There are USDC payments on the deployed contract already; a payment list that
- * forgot how to name an asset just because the form stopped offering it would
- * print an amount with no unit beside it. We stop offering it; we do not stop
- * understanding it.
+ * The anchor is what changed. A dollar balance can now leave Stellar as Turkish
+ * lira in a bank account, which is the thing the recipient actually wanted, and
+ * the trustline is one screen on the way there rather than a dead end. XLM
+ * stays first and stays the default — it still needs no trustline, and the
+ * person sending twenty dollars to a stranger's handle should not have to think
+ * about any of this.
+ *
+ * The list is kept separate from `TOKENS` rather than deleted, because the two
+ * answer different questions: this one is "what may a sender choose", `TOKENS`
+ * is "what can this build put a name to". A payment list has to keep reading
+ * assets long after the form stops offering them.
  */
 export const SENDABLE_TOKENS: TokenConfig[] = TOKENS.filter(
-  (t) => t.key === "XLM",
+  (t) => t.key !== "USDC_LEGACY",
 );
 
 export function tokenByKey(key: TokenKey): TokenConfig {

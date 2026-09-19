@@ -15,14 +15,21 @@ import {
   listPaymentsForIdentity,
   submitSigned,
   STATUS,
-  type Payment,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { sign, networkMismatch } from "@/lib/freighter";
 import { fromHex, kindUrlPrefix, type IdentityKind } from "@/lib/identity";
 import { claimDestination } from "@/lib/payout";
+import {
+  anyUnits,
+  groupByAsset,
+  named,
+  unnamed,
+  type AssetTotal,
+  type NamedAsset,
+} from "@/lib/assets";
 import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
-import { DEFAULT_TOKEN, X_ENABLED, tokenByContractId } from "@/lib/config";
+import { DEFAULT_TOKEN, X_ENABLED } from "@/lib/config";
 
 /**
  * Claiming, as a list rather than a wizard.
@@ -38,12 +45,21 @@ import { DEFAULT_TOKEN, X_ENABLED, tokenByContractId } from "@/lib/config";
  * whichever row has something. A provider you have not verified is a row too —
  * with a Verify button, because an empty row is how you learn the other half
  * exists.
+ *
+ * And within a row, one line per asset. The escrow is asset-agnostic, so a
+ * handle can hold XLM and USDC at the same time; the page used to show the
+ * default asset and filter the rest out of existence, which meant money on
+ * chain that no screen in the product would admit to. Each asset now states
+ * itself and carries its own button — separate buttons rather than one, because
+ * a claim is atomic: batching an asset the wallet cannot yet hold would take
+ * the asset it can hold down with it.
  */
 
-/** What the chain says about one identity. */
+/** What the chain says about one identity, asset by asset. */
 type Escrow = {
-  claimable: Payment[];
-  total: bigint;
+  assets: AssetTotal[];
+  /** Earliest expiry ledger, per token contract id. */
+  soonest: Record<string, number>;
 };
 
 export default function ClaimPanel({
@@ -78,8 +94,14 @@ export default function ClaimPanel({
     null,
   );
 
-  /** Which identity a claim is running for, and how far along it is. */
-  const [busy, setBusy] = useState<{ hex: string; step: string } | null>(null);
+  /**
+   * Which claim is running, and how far along it is.
+   *
+   * Keyed by identity AND asset (`hex:contractId`), because those are the units
+   * a claim comes in now. Keyed by identity alone, starting the USDC claim
+   * would put a spinner on the XLM button beside it.
+   */
+  const [busy, setBusy] = useState<{ key: string; step: string } | null>(null);
   const [claimed, setClaimed] = useState<Claimed | null>(null);
   // Bumped when a claim finishes: the payments it took are Claimed now, so the
   // row would otherwise keep offering money that has already moved.
@@ -103,18 +125,26 @@ export default function ClaimPanel({
 
         const next: Record<string, Escrow> = {};
         hexes.forEach((hex, i) => {
-          // One asset only. Adding XLM to USDC would produce a number that is
-          // not any amount of anything.
+          // Everything still claimable, whatever asset it is in. The totals are
+          // kept apart rather than added up: 100 XLM plus 30 USDC is not 130 of
+          // anything, and the screen should never imply that it is.
           const claimable = lists[i].filter(
-            (p) =>
-              p.status === STATUS.Pending &&
-              p.expiryLedger > seq &&
-              tokenByContractId(p.token)?.key === DEFAULT_TOKEN.key,
+            (p) => p.status === STATUS.Pending && p.expiryLedger > seq,
           );
-          next[hex] = {
-            claimable,
-            total: claimable.reduce((acc, p) => acc + p.amount, 0n),
-          };
+
+          // The claim window runs per payment, so it runs per asset too. One
+          // "3 days left" under the handle would be quoting the soonest deadline
+          // at every asset on the row, including the ones it has nothing to do
+          // with.
+          const soonest: Record<string, number> = {};
+          for (const p of claimable) {
+            const prev = soonest[p.token];
+            if (prev === undefined || p.expiryLedger < prev) {
+              soonest[p.token] = p.expiryLedger;
+            }
+          }
+
+          next[hex] = { assets: groupByAsset(claimable), soonest };
         });
         setLedger(seq);
         setEscrows(next);
@@ -129,23 +159,28 @@ export default function ClaimPanel({
     };
   }, [keys, tick]);
 
-  async function claim(hex: string, handle: string, kind: IdentityKind) {
-    const escrow = escrows?.[hex];
-    if (!escrow || escrow.claimable.length === 0 || !address) return;
+  async function claim(
+    hex: string,
+    handle: string,
+    kind: IdentityKind,
+    asset: NamedAsset,
+  ) {
+    if (asset.ids.length === 0 || !address) return;
 
     // The destination is per identity: a payout address locked on one handle
     // has nothing to do with the other one.
     const to = claimDestination(savedFor(kind), address).address;
     if (!to) return;
 
-    const ids = escrow.claimable.map((p) => p.id);
+    const ids = asset.ids;
+    const busyKey = `${hex}:${asset.contractId}`;
     setError(null);
     try {
-      setBusy({ hex, step: "Checking the network…" });
+      setBusy({ key: busyKey, step: "Checking the network…" });
       const mismatch = await networkMismatch();
       if (mismatch) throw new Error(mismatch);
 
-      setBusy({ hex, step: "Getting authorization…" });
+      setBusy({ key: busyKey, step: "Getting authorization…" });
       const res = await fetch("/api/verify/claim-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,7 +196,7 @@ export default function ClaimPanel({
         throw new Error(auth.error ?? "The verifier refused to sign.");
       }
 
-      setBusy({ hex, step: "Preparing…" });
+      setBusy({ key: busyKey, step: "Preparing…" });
       const tx = await buildClaim({
         // The connected wallet submits and pays the fee; `recipient` is where
         // the money lands, and nothing on chain requires them to be the same.
@@ -174,12 +209,23 @@ export default function ClaimPanel({
         signature: fromHex(auth.signature),
       });
 
-      setBusy({ hex, step: "Waiting for your wallet…" });
+      setBusy({ key: busyKey, step: "Waiting for your wallet…" });
       const signed = await sign(tx.toXdr(), address);
 
-      setBusy({ hex, step: "Submitting…" });
+      setBusy({ key: busyKey, step: "Submitting…" });
       const out = await submitSigned(signed);
-      setClaimed({ hash: out.hash, units: escrow.total, to, kind, handle });
+      setClaimed({
+        hash: out.hash,
+        units: asset.units,
+        // The receipt names the asset it is a receipt for. It used to print the
+        // default symbol whatever had moved, which on a USDC claim was a
+        // confident lie about which money had just landed.
+        symbol: asset.token.symbol,
+        decimals: asset.token.decimals,
+        to,
+        kind,
+        handle,
+      });
       // The person's own page shows what is waiting in escrow, server-rendered.
       // Without this, going back to it after a claim shows the money still
       // sitting there.
@@ -265,7 +311,9 @@ export default function ClaimPanel({
 
   // ---------------------------------------------------------------- the rows
 
-  const anything = mine.some((v) => (escrows?.[v.identityHex]?.total ?? 0n) > 0n);
+  const anything = mine.some((v) =>
+    anyUnits(escrows?.[v.identityHex]?.assets ?? []),
+  );
 
   return (
     <div className="space-y-4">
@@ -276,88 +324,138 @@ export default function ClaimPanel({
           // Per identity, always: the locked address if there is one, otherwise
           // the wallet connected right now.
           const destination = claimDestination(locked, address).address;
-          const running = busy?.hex === v.identityHex;
-          const soonest = escrow?.claimable.reduce(
-            (min, p) => (min === null || p.expiryLedger < min ? p.expiryLedger : min),
-            null as number | null,
-          );
+          const assets = named(escrow?.assets ?? []);
+          // Assets on this tag that this build has no name for. They are not
+          // offered — an amount with no unit beside it is not an offer — but
+          // they are counted, because money the interface refuses to mention is
+          // the failure this whole screen was rebuilt to stop.
+          const strangers = unnamed(escrow?.assets ?? []);
+          const holding = assets.length > 0;
 
           return (
-            // Two columns, not a wrapping flex row: the handle and its meta
-            // form one block on the left, the amount and its button one cluster
-            // on the right, and the row keeps the same shape whether or not
-            // there is money on it.
-            <li
-              key={v.identityHex}
-              className="flex items-center justify-between gap-4 p-4"
-            >
-              <span className="min-w-0">
-                <span className="flex items-center gap-2">
-                  {PROVIDERS.find((p) => p.kind === v.kind)?.icon}
-                  <span className="mono truncate text-sm">
-                    {kindUrlPrefix(v.kind)}
-                    {v.handle}
-                  </span>
-                </span>
-
-                {/* Where THIS handle's money goes, on the row itself. It was a
-                    single line under the list, which read as one destination
-                    for both — and the two can pay two different wallets. */}
-                {escrow && escrow.total > 0n && (
-                  <span className="mt-0.5 block pl-6 text-xs text-mute">
-                    {soonest !== null && soonest !== undefined && ledger !== null && (
-                      <>{ledgersToHuman(soonest - ledger)} left · </>
-                    )}
-                    {destination ? (
-                      <>
-                        pays <span className="mono">{shortAddr(destination)}</span>
-                        {locked && " (locked)"}
-                      </>
-                    ) : (
-                      "connect a wallet to claim it"
-                    )}
-                  </span>
-                )}
-
-                {/* The failure sits with the handle it happened to. */}
-                {error?.hex === v.identityHex && (
-                  <span
-                    role="alert"
-                    className="mt-1 block pl-6 text-xs text-danger"
-                  >
-                    {error.text}
-                  </span>
-                )}
-              </span>
-
-              <span className="flex shrink-0 items-center gap-3">
-                {escrows === null ? (
-                  <span className="skeleton h-6 w-20" />
-                ) : (
-                  <span
-                    className={`num text-lg font-bold ${
-                      (escrow?.total ?? 0n) > 0n ? "text-accent-text" : "text-mute"
-                    }`}
-                    title={`${fromUnits(escrow?.total ?? 0n)} ${DEFAULT_TOKEN.symbol}`}
-                  >
-                    {displayUnits(escrow?.total ?? 0n)}{" "}
-                    <span className="text-xs font-semibold text-dim">
-                      {DEFAULT_TOKEN.symbol}
+            // The handle heads the row; its assets are listed underneath it.
+            // One line per asset, because that is the unit a claim comes in:
+            // the claim call is atomic, so an asset the wallet cannot yet hold
+            // would take the one it can hold down with it if they shared a
+            // button.
+            <li key={v.identityHex} className="p-4">
+              <div className="flex items-center justify-between gap-4">
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2">
+                    {PROVIDERS.find((p) => p.kind === v.kind)?.icon}
+                    <span className="mono truncate text-sm">
+                      {kindUrlPrefix(v.kind)}
+                      {v.handle}
                     </span>
                   </span>
-                )}
 
-                {escrow && escrow.total > 0n && address && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => void claim(v.identityHex, v.handle, v.kind)}
-                    disabled={busy !== null}
-                  >
-                    {running && <span className="spinner" aria-hidden />}
-                    {running ? busy.step : "Claim"}
-                  </button>
+                  {/* Where THIS handle's money goes, on the row itself. It was a
+                      single line under the list, which read as one destination
+                      for both — and the two can pay two different wallets. */}
+                  {holding && (
+                    <span className="mt-0.5 block pl-6 text-xs text-mute">
+                      {destination ? (
+                        <>
+                          pays{" "}
+                          <span className="mono">{shortAddr(destination)}</span>
+                          {locked && " (locked)"}
+                        </>
+                      ) : (
+                        "connect a wallet to claim it"
+                      )}
+                    </span>
+                  )}
+
+                  {/* The failure sits with the handle it happened to. */}
+                  {error?.hex === v.identityHex && (
+                    <span
+                      role="alert"
+                      className="mt-1 block pl-6 text-xs text-danger"
+                    >
+                      {error.text}
+                    </span>
+                  )}
+                </span>
+
+                {/* The empty and unread states keep the old shape: a number on
+                    the right of the handle, so a row with nothing on it still
+                    reads as a row about an amount. */}
+                {escrows === null ? (
+                  <span className="skeleton h-6 w-20 shrink-0" />
+                ) : (
+                  !holding && (
+                    <span className="num shrink-0 text-lg font-bold text-mute">
+                      0{" "}
+                      <span className="text-xs font-semibold text-dim">
+                        {DEFAULT_TOKEN.symbol}
+                      </span>
+                    </span>
+                  )
                 )}
-              </span>
+              </div>
+
+              {holding && (
+                <ul className="mt-3 space-y-2 pl-6">
+                  {assets.map((a) => {
+                    const t = a.token;
+                    const key = `${v.identityHex}:${a.contractId}`;
+                    const running = busy?.key === key;
+                    const soonest = escrow?.soonest[a.contractId];
+
+                    return (
+                      <li
+                        key={a.contractId}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span className="min-w-0">
+                          <span
+                            className="num text-lg font-bold text-accent-text"
+                            title={`${fromUnits(a.units, t.decimals)} ${t.symbol}`}
+                          >
+                            {displayUnits(a.units, t.decimals)}{" "}
+                            <span className="text-xs font-semibold text-dim">
+                              {t.symbol}
+                            </span>
+                          </span>
+
+                          {/* Per asset, not per handle: the claim window runs
+                              per payment, so the deadline on the XLM has
+                              nothing to say about the USDC beside it. */}
+                          {soonest !== undefined && ledger !== null && (
+                            <span className="ml-2 text-xs text-mute">
+                              {ledgersToHuman(soonest - ledger)} left
+                            </span>
+                          )}
+                        </span>
+
+                        {address && (
+                          <button
+                            className="btn btn-primary btn-sm shrink-0"
+                            onClick={() =>
+                              void claim(v.identityHex, v.handle, v.kind, a)
+                            }
+                            disabled={busy !== null}
+                          >
+                            {running && <span className="spinner" aria-hidden />}
+                            {running ? busy.step : `Claim ${t.symbol}`}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+
+                  {/* Named only by its contract id, because that is the only
+                      true thing this build knows about it. */}
+                  {strangers.map((a) => (
+                    <li key={a.contractId} className="text-xs text-mute">
+                      {a.ids.length}{" "}
+                      {a.ids.length === 1 ? "payment" : "payments"} in an asset
+                      this app cannot name (
+                      <span className="mono">{shortAddr(a.contractId)}</span>)
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           );
         })}

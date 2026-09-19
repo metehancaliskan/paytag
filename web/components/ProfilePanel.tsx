@@ -12,7 +12,8 @@ import {
 import { describeEscrowError } from "@/lib/stellar";
 import { type IdentityKind } from "@/lib/identity";
 import { displayUnits, fromUnits } from "@/lib/format";
-import { DEFAULT_TOKEN, tokenByContractId } from "@/lib/config";
+import { groupByAsset, named, unnamed } from "@/lib/assets";
+import { DEFAULT_TOKEN } from "@/lib/config";
 
 type Props = { handle: string; identityHex: string; kind: IdentityKind };
 
@@ -60,17 +61,16 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
   }, [identityHex, tick, wantKey]);
 
   const pending = (payments ?? []).filter((p) => p.status === STATUS.Pending);
-  // The headline number sums one asset only — adding XLM to USDC would produce
-  // a figure that means nothing. The default asset leads; anything else is
-  // counted separately below it.
-  const headlineAsset = DEFAULT_TOKEN;
-  const inHeadline = pending.filter(
-    (p) => tokenByContractId(p.token)?.key === headlineAsset.key,
-  );
-  const otherAssets = pending.filter(
-    (p) => tokenByContractId(p.token)?.key !== headlineAsset.key,
-  );
-  const total = inHeadline.reduce((acc, p) => acc + p.amount, 0n);
+  // One headline figure, and it is one asset's — adding XLM to USDC would
+  // produce a number that is not any amount of anything. The rest of the assets
+  // get their own line under it rather than a count ("2 in another asset"),
+  // which named no amount and so could not be read as money.
+  const assets = named(groupByAsset(pending));
+  const strangers = unnamed(groupByAsset(pending));
+  const lead = assets[0] ?? null;
+  const rest = assets.slice(1);
+  const headlineAsset = lead?.token ?? DEFAULT_TOKEN;
+  const total = lead?.units ?? 0n;
 
   return (
     <div className="space-y-6">
@@ -95,16 +95,41 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
           // escrow" and "we could not ask" are very different facts.
           <p
             className="num mt-1 text-3xl font-bold tracking-tight text-accent-text"
-            title={loadError ? undefined : `${fromUnits(total)} ${headlineAsset.symbol}`}
+            title={
+              loadError
+                ? undefined
+                : `${fromUnits(total, headlineAsset.decimals)} ${headlineAsset.symbol}`
+            }
           >
             {loadError ? (
               <span className="text-mute">?</span>
             ) : (
-              displayUnits(total)
+              displayUnits(total, headlineAsset.decimals)
             )}{" "}
             <span className="text-lg font-semibold text-dim">
               {headlineAsset.symbol}
             </span>
+          </p>
+        )}
+
+        {/* Every other asset waiting on this handle, as an amount rather than
+            a tally. The escrow holds whatever it was sent; a screen that counts
+            those payments without naming them tells the sender that something
+            is there and refuses to say what. */}
+        {rest.length > 0 && !loadError && (
+          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            {rest.map((a) => (
+              <span
+                key={a.contractId}
+                className="num text-sm font-semibold text-dim"
+                title={`${fromUnits(a.units, a.token.decimals)} ${a.token.symbol}`}
+              >
+                {displayUnits(a.units, a.token.decimals)}{" "}
+                <span className="text-xs font-semibold text-mute">
+                  {a.token.symbol}
+                </span>
+              </span>
+            ))}
           </p>
         )}
 
@@ -121,8 +146,12 @@ export default function ProfilePanel({ handle, identityHex, kind }: Props) {
               {payments.length > pending.length && (
                 <> · {payments.length - pending.length} settled</>
               )}
-              {otherAssets.length > 0 && (
-                <> · {otherAssets.length} in another asset</>
+              {strangers.length > 0 && (
+                <>
+                  {" "}
+                  · {strangers.reduce((n, a) => n + a.ids.length, 0)} in an
+                  asset this app cannot name
+                </>
               )}
             </>
           )}

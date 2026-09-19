@@ -26,7 +26,11 @@ export default defineConfig({
       NEXT_PUBLIC_STELLAR_RPC_URL: "https://soroban-testnet.stellar.org",
       NEXT_PUBLIC_ESCROW_CONTRACT_ID:
         "CDN2BQNGHWCC22IXLAKBAVIOL5ID4MTH4FNYISVEARWQ4HZ27ZA7OZ3B",
+      // The TR mock anchor's USDC — the asset the ramp actually moves.
       NEXT_PUBLIC_USDC_SAC_ID:
+        "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+      // The USDC we issued ourselves, which earlier payments are still in.
+      NEXT_PUBLIC_USDC_LEGACY_SAC_ID:
         "CBU7HRUSXSVPI7QHA73G67UDRQTKSEOICFHWOMWSPOZ2S3R3DIWUCPKI",
       // The real testnet native SAC, the same value CI builds with. No test
       // reads the chain, so any non-empty value would do, but a wrong one here
