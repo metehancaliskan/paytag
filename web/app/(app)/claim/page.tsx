@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ClaimPanel from "@/components/ClaimPanel";
+import { AssetMark, ChevronRight } from "@/components/icons";
 import { ANCHOR_ENABLED, FIAT_CODE } from "@/lib/anchor/config";
 import { KIND_SLUG, isKindSlug } from "@/lib/identity";
 
@@ -38,17 +39,31 @@ export default async function ClaimPage({
         authError={authError}
       />
 
-      {/* The step after this one, named before the reader has to go looking
-          for it. Claiming leaves a balance on a network; this is where it
-          stops being that. */}
+      {/* The step after this one, and the whole point of the product for the
+          person on this page: claiming leaves a balance on a network they did
+          not ask to be on, and this is where it stops being that.
+
+          A card rather than the grey sentence it was. That sentence was the
+          last line on the busiest screen in the app, in the quietest colour
+          available — which is where you put something you do not want read. */}
       {ANCHOR_ENABLED && (
-        <p className="px-1 text-xs text-mute">
-          Already claimed?{" "}
-          <Link className="link" href="/cashout">
-            Cash out to {FIAT_CODE} in your bank
-          </Link>
-          .
-        </p>
+        <Link
+          href="/cashout"
+          className="card group flex items-center gap-3.5 p-4 transition-colors hover:border-accent"
+        >
+          <AssetMark asset="TRY" size={34} />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">Cash out to your bank</span>
+              <span className="badge badge-claimed">new</span>
+            </span>
+            <span className="mt-0.5 block text-xs text-mute">
+              What you claimed, as {FIAT_CODE} in a Turkish bank account. No
+              exchange in between.
+            </span>
+          </span>
+          <ChevronRight className="shrink-0 text-mute transition-colors group-hover:text-accent-text" />
+        </Link>
       )}
     </div>
   );

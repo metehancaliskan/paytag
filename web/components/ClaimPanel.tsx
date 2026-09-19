@@ -8,6 +8,9 @@ import { useIdentity, identityList } from "./useIdentity";
 import { usePayout } from "./usePayout";
 import { PROVIDERS } from "./providers";
 import ClaimedDialog, { type Claimed } from "./ClaimedDialog";
+import Avatar from "./Avatar";
+import { AssetMark } from "./icons";
+import { avatarUrl } from "@/lib/cards";
 import { describeAuthError } from "@/lib/auth-errors";
 import {
   buildClaim,
@@ -341,20 +344,33 @@ export default function ClaimPanel({
             // button.
             <li key={v.identityHex} className="p-4">
               <div className="flex items-center justify-between gap-4">
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2">
-                    {PROVIDERS.find((p) => p.kind === v.kind)?.icon}
-                    <span className="mono truncate text-sm">
-                      {kindUrlPrefix(v.kind)}
-                      {v.handle}
+                <span className="flex min-w-0 items-center gap-3">
+                  {/* The face that goes with the name. These are handles the
+                      reader has proved they own, so the picture is the fastest
+                      confirmation that the right account is signed in — faster
+                      than reading a string of characters back. It is
+                      decorative and falls back to initials: GitHub's avatar is
+                      derived from the handle, X's goes through a third party
+                      that answers 404 as often as not. */}
+                  <Avatar
+                    src={avatarUrl({ kind: v.kind, handle: v.handle })}
+                    handle={v.handle}
+                    size={36}
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      {PROVIDERS.find((p) => p.kind === v.kind)?.icon}
+                      <span className="mono truncate text-sm">
+                        {kindUrlPrefix(v.kind)}
+                        {v.handle}
+                      </span>
                     </span>
-                  </span>
 
                   {/* Where THIS handle's money goes, on the row itself. It was a
                       single line under the list, which read as one destination
                       for both — and the two can pay two different wallets. */}
                   {holding && (
-                    <span className="mt-0.5 block pl-6 text-xs text-mute">
+                    <span className="mt-0.5 block text-xs text-mute">
                       {destination ? (
                         <>
                           pays{" "}
@@ -371,11 +387,12 @@ export default function ClaimPanel({
                   {error?.hex === v.identityHex && (
                     <span
                       role="alert"
-                      className="mt-1 block pl-6 text-xs text-danger"
+                      className="mt-1 block text-xs text-danger"
                     >
                       {error.text}
                     </span>
                   )}
+                  </span>
                 </span>
 
                 {/* The empty and unread states keep the old shape: a number on
@@ -396,7 +413,11 @@ export default function ClaimPanel({
               </div>
 
               {holding && (
-                <ul className="mt-3 space-y-2 pl-6">
+                // Bordered rows rather than bare lines, the same shape the
+                // send form uses for the assets it offers. Both screens are
+                // answering "which asset", and a person moving between them
+                // should not have to learn the answer twice.
+                <ul className="mt-3 divide-y divide-line overflow-hidden rounded-xl border border-line">
                   {assets.map((a) => {
                     const t = a.token;
                     const key = `${v.identityHex}:${a.contractId}`;
@@ -406,9 +427,13 @@ export default function ClaimPanel({
                     return (
                       <li
                         key={a.contractId}
-                        className="flex items-center justify-between gap-3"
+                        className="flex items-center gap-3 p-3"
                       >
-                        <span className="min-w-0">
+                        <AssetMark
+                          asset={t.key === "XLM" ? "XLM" : "USDC"}
+                          size={24}
+                        />
+                        <span className="min-w-0 flex-1">
                           <span
                             className="num text-lg font-bold text-accent-text"
                             title={`${fromUnits(a.units, t.decimals)} ${t.symbol}`}
@@ -423,8 +448,8 @@ export default function ClaimPanel({
                               per payment, so the deadline on the XLM has
                               nothing to say about the USDC beside it. */}
                           {soonest !== undefined && ledger !== null && (
-                            <span className="ml-2 text-xs text-mute">
-                              {ledgersToHuman(soonest - ledger)} left
+                            <span className="mt-0.5 block text-xs text-mute">
+                              {ledgersToHuman(soonest - ledger)} left to claim
                             </span>
                           )}
                         </span>
@@ -448,7 +473,7 @@ export default function ClaimPanel({
                   {/* Named only by its contract id, because that is the only
                       true thing this build knows about it. */}
                   {strangers.map((a) => (
-                    <li key={a.contractId} className="text-xs text-mute">
+                    <li key={a.contractId} className="p-3 text-xs text-mute">
                       {a.ids.length}{" "}
                       {a.ids.length === 1 ? "payment" : "payments"} in an asset
                       this app cannot name (
