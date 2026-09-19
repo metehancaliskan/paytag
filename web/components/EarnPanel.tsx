@@ -197,15 +197,21 @@ export default function EarnPanel() {
   const row = rows?.find((r) => r.token.key === picked) ?? rows?.[0] ?? null;
 
   /**
-   * The XOXNO position, redrawn as it grows.
+   * The XOXNO positions, redrawn as they grow.
    *
-   * Blend's yield arrives as a token and gets its own figure; XOXNO's is the
-   * position itself being worth more, so the figure that moves is the position.
-   * Null on the other venue, and the hook goes quiet.
+   * Blend's yield arrives as a token and gets one figure for the lot; XOXNO's
+   * is each position being worth more, so each one moves on its own — and all
+   * of them are shown, not only the row that happens to be selected. Somebody
+   * with USDC lent should see it earning while they are looking at their XLM.
+   * Empty on the other venue, and the hook goes quiet.
    */
   const lent = useLiveLent(
-    venue === "xoxno" && row ? row.token.contractId : null,
-    venue === "xoxno" && row ? row.lent.total : 0n,
+    venue === "xoxno"
+      ? (rows ?? []).map((r) => ({
+          asset: r.token.contractId,
+          collateral: r.lent.total,
+        }))
+      : [],
     tick,
   );
 
@@ -503,29 +509,41 @@ export default function EarnPanel() {
           {/* XOXNO pays no second token: what grows is the holding. So the
               holding is what ticks — drawn from the market's supply index,
               which moves in billions of RAY while the balance itself is still
-              a fraction of a stroop away from changing. */}
-          {venue === "xoxno" && row && row.lent.total > 0n && (
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-line p-3">
-              <span className="text-sm">
-                <LiveAmount
-                  value={fromUnits(lent.value, 9)}
-                  className="num text-base font-bold tabular-nums text-accent-text"
-                />{" "}
-                <span className="text-xs font-semibold text-dim">
-                  {row.token.symbol}
-                </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-mute">
-                  {lent.live && (
-                    <span
-                      aria-hidden
-                      className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
-                    />
-                  )}
-                  growing right now
-                  {lent.apy > 0 && ` · about ${lent.apy.toFixed(2)}% a year`}
-                </span>
-              </span>
-            </div>
+              a fraction of a stroop away from changing.
+
+              One line per position, whichever row is selected. A balance that
+              is earning should say so even when the reader is looking
+              somewhere else on the card. */}
+          {venue === "xoxno" && anyLent && (
+            <ul className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line">
+              {rows
+                .filter((r) => r.lent.total > 0n)
+                .map((r) => {
+                  const live = lent[r.token.contractId];
+                  return (
+                    <li key={r.token.contractId} className="p-3 text-sm">
+                      <LiveAmount
+                        value={fromUnits(live?.value ?? r.lent.total * 100n, 9)}
+                        className="num text-base font-bold tabular-nums text-accent-text"
+                      />{" "}
+                      <span className="text-xs font-semibold text-dim">
+                        {r.token.symbol}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-xs text-mute">
+                        {live?.live && (
+                          <span
+                            aria-hidden
+                            className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
+                          />
+                        )}
+                        growing right now
+                        {(live?.apy ?? 0) > 0 &&
+                          ` · about ${live!.apy.toFixed(2)}% a year`}
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
           )}
 
           {/* Blend's reward is a separate token on a separate clock, so it gets

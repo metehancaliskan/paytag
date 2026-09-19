@@ -4,7 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { accruedRewards } from "@/lib/blend/pool";
 import { project, ratePerMs, type Sample } from "@/lib/blend/rewards";
 
-/** How often the pool is actually asked, and how often the digits are redrawn. */
+/**
+ * How long to wait before each reading.
+ *
+ * The first gap is short on purpose. A rate needs two readings, and until
+ * there is one the figure cannot move — so a five second first gap meant the
+ * counter sat still for five seconds every time the panel opened, which is
+ * exactly when somebody is looking at it. A second reading a beat later is
+ * enough to start it, and every reading after that sharpens the estimate.
+ */
+const FIRST_GAP_MS = 1_200;
 const POLL_MS = 5_000;
 const DRAW_MS = 400;
 
@@ -37,27 +46,38 @@ export function useLiveRewards(
     if (!address || ids === "") return;
     let alive = true;
     let previous: Sample | null = null;
+    let readings = 0;
+    let timer: ReturnType<typeof setTimeout>;
 
     const ask = async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      try {
-        const value = await accruedRewards(address, ids.split(",").map(Number));
-        if (!alive) return;
-        const next = { value, at: Date.now() };
-        rate.current = ratePerMs(previous, next);
-        previous = next;
-        setSample(next);
-      } catch {
-        // A missed reading is not worth a message: the last one stays on
-        // screen, the projection keeps it moving, and the next one corrects it.
+      if (typeof document === "undefined" || !document.hidden) {
+        try {
+          const value = await accruedRewards(
+            address,
+            ids.split(",").map(Number),
+          );
+          if (!alive) return;
+          const next = { value, at: Date.now() };
+          rate.current = ratePerMs(previous, next);
+          previous = next;
+          readings += 1;
+          setSample(next);
+        } catch {
+          // A missed reading is not worth a message: the last one stays on
+          // screen, the projection keeps it moving, and the next corrects it.
+        }
+      }
+      if (alive) {
+        // Two readings make a rate, so the second one comes quickly and the
+        // rest settle into the ordinary rhythm.
+        timer = setTimeout(() => void ask(), readings < 2 ? FIRST_GAP_MS : POLL_MS);
       }
     };
 
     void ask();
-    const poll = setInterval(() => void ask(), POLL_MS);
     return () => {
       alive = false;
-      clearInterval(poll);
+      clearTimeout(timer);
     };
   }, [address, ids, tick]);
 
