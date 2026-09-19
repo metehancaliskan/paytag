@@ -11,8 +11,19 @@
 // standard calls and named for what it is, so that moving to a real anchor is
 // deleting one button rather than untangling a flow.
 
+import type { TokenGetter } from "./auth";
 import { POLL_ATTEMPTS, POLL_INTERVAL_MS } from "./config";
 import type { AnchorInfo } from "./toml";
+
+/**
+ * Either a token, or something that can produce one.
+ *
+ * A bare string is fine for a single call made immediately. Anything that
+ * waits — the poll loop, above all — should be handed a getter, because the
+ * anchor's JWT can expire in the middle of a bank transfer and re-signing is
+ * one wallet prompt against a flow that otherwise dead-ends.
+ */
+export type Auth = string | TokenGetter;
 
 export type DepositInstructions = {
   id: string;
@@ -73,7 +84,7 @@ export async function depositLimits(
  */
 export async function startDeposit(
   anchor: AnchorInfo,
-  token: string,
+  auth: Auth,
   account: string,
   fiatAmount: string,
 ): Promise<DepositInstructions> {
@@ -86,7 +97,7 @@ export async function startDeposit(
       type: "bank_account",
     });
 
-  const body = await anchorJson(url, token, "start the deposit");
+  const body = await anchorJson(url, auth, "start the deposit");
   const id = typeof body.id === "string" ? body.id : null;
   if (!id) throw new Error("The anchor did not return a deposit id.");
 
@@ -144,7 +155,7 @@ export async function withdrawLimits(anchor: AnchorInfo): Promise<Sep6Limits> {
  */
 export async function startWithdraw(
   anchor: AnchorInfo,
-  token: string,
+  auth: Auth,
   assetAmount: string,
 ): Promise<WithdrawInstructions> {
   const url =
@@ -155,7 +166,7 @@ export async function startWithdraw(
       amount: assetAmount,
     });
 
-  const body = await anchorJson(url, token, "start the withdrawal");
+  const body = await anchorJson(url, auth, "start the withdrawal");
 
   const id = str(body.id);
   const accountId = str(body.account_id);
@@ -177,12 +188,12 @@ export async function startWithdraw(
 
 export async function getTransaction(
   anchor: AnchorInfo,
-  token: string,
+  auth: Auth,
   id: string,
 ): Promise<AnchorTransaction> {
   const body = await anchorJson(
     `${anchor.transferServer}/transaction?id=${encodeURIComponent(id)}`,
-    token,
+    auth,
     "read the transaction",
   );
   const t = (body.transaction ?? body) as Record<string, unknown>;
@@ -216,18 +227,24 @@ export async function getTransaction(
  */
 export async function simulateBankTransfer(
   anchor: AnchorInfo,
-  token: string,
+  auth: Auth,
   id: string,
   fiatAmount: string,
 ): Promise<void> {
-  const res = await fetch(`${anchor.transferServer}/tx/${id}/simulate-bank-transfer`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ amount: fiatAmount }),
-  });
+  const send = (token: string) =>
+    fetch(`${anchor.transferServer}/tx/${id}/simulate-bank-transfer`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ amount: fiatAmount }),
+    });
+
+  let res = await send(await bearer(auth));
+  if (rejectedTheToken(res.status) && typeof auth === "function") {
+    res = await send(await auth(true));
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? "The sandbox could not simulate the transfer.");
@@ -241,10 +258,14 @@ export async function simulateBankTransfer(
  * on the way are the interesting part: this is a flow where the honest answer
  * for a minute at a time is "the anchor is working on it", and a spinner that
  * says nothing is how people conclude a payment has been lost.
+ *
+ * This is the call that most needs a token getter rather than a token. The
+ * wait here is a bank transfer clearing, which can outlast a SEP-10 JWT; with
+ * a getter each reading carries a token that is valid when it is made.
  */
 export async function pollTransaction(
   anchor: AnchorInfo,
-  token: string,
+  auth: Auth,
   id: string,
   onUpdate: (tx: AnchorTransaction) => void,
   shouldStop: () => boolean = () => false,
@@ -253,7 +274,7 @@ export async function pollTransaction(
 
   for (let i = 0; i < POLL_ATTEMPTS; i++) {
     if (shouldStop()) break;
-    last = await getTransaction(anchor, token, id);
+    last = await getTransaction(anchor, auth, id);
     onUpdate(last);
     if (isFinal(last.status)) return last;
     await sleep(POLL_INTERVAL_MS);
@@ -318,16 +339,42 @@ export function describeStatus(status: string): string {
 
 // ------------------------------------------------------------------- helpers
 
+/** The token this call should carry, asking for one if we were given a getter. */
+async function bearer(auth: Auth, force = false): Promise<string> {
+  return typeof auth === "string" ? auth : auth(force);
+}
+
+/**
+ * The anchor is saying the credential is the problem, not the request.
+ *
+ * 403 is included because anchors are not consistent about which of the two
+ * they use for a spent token, and the cost of being wrong is one extra
+ * signature rather than a lost transfer.
+ */
+function rejectedTheToken(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 async function anchorJson(
   url: string,
-  token: string,
+  auth: Auth,
   what: string,
 ): Promise<Record<string, unknown>> {
-  let res: Response;
-  try {
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  } catch {
-    throw new Error(`Could not reach the anchor to ${what}.`);
+  const get = async (token: string) => {
+    try {
+      return await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    } catch {
+      throw new Error(`Could not reach the anchor to ${what}.`);
+    }
+  };
+
+  let res = await get(await bearer(auth));
+
+  // One retry, and only with a genuinely new signature. A getter that hands
+  // back the same cached token would turn this into two identical failures,
+  // which is why `force` exists on the other side.
+  if (rejectedTheToken(res.status) && typeof auth === "function") {
+    res = await get(await auth(true));
   }
 
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;

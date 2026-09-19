@@ -22,7 +22,7 @@ import {
   FIAT_CODE,
 } from "@/lib/anchor/config";
 import { loadAnchor, type AnchorInfo } from "@/lib/anchor/toml";
-import { authenticate } from "@/lib/anchor/auth";
+import { tokenSource, type TokenGetter } from "@/lib/anchor/auth";
 import { priceFor, trimAmount, type Quote } from "@/lib/anchor/sep38";
 import {
   depositLimits,
@@ -231,8 +231,14 @@ export default function TopUpPanel() {
 
       // One signature, and it never reaches the network: SEP-10 challenges are
       // built with sequence number 0 precisely so they cannot be submitted.
+      //
+      // Signed here rather than lazily, so the wallet prompt belongs to the
+      // step that announced it. What is passed on is the getter, not the
+      // token: a bank transfer can outlast a JWT, and the later calls should
+      // ask again rather than carry a spent one.
       setBusy("Proving the wallet is yours…");
-      const token = await authenticate(anchor, address, sign);
+      const token = tokenSource(anchor, address, sign);
+      await token();
 
       setBusy("Asking the anchor for bank details…");
       const started = await startDeposit(anchor, token, address, typedAmount);
@@ -255,7 +261,7 @@ export default function TopUpPanel() {
     setError(null);
     try {
       setBusy("Pretending the bank paid…");
-      const token = await authenticate(anchor, address, sign);
+      const token = tokenSource(anchor, address, sign);
       await simulateBankTransfer(anchor, token, instructions.id, typedAmount);
       await watch(token);
     } catch (e) {
@@ -265,7 +271,7 @@ export default function TopUpPanel() {
     }
   }
 
-  async function watch(token: string) {
+  async function watch(token: TokenGetter) {
     if (!anchor || !instructions) return;
     const final = await pollTransaction(
       anchor,
@@ -285,7 +291,7 @@ export default function TopUpPanel() {
     setError(null);
     try {
       setBusy("Asking the anchor…");
-      const token = await authenticate(anchor, address, sign);
+      const token = tokenSource(anchor, address, sign);
       await watch(token);
     } catch (e) {
       setError(message(e));

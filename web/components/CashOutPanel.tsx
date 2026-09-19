@@ -9,7 +9,7 @@ import { AssetMark } from "./icons";
 import { sign as signWithWallet, networkMismatch } from "@/lib/freighter";
 import { explorerTx } from "@/lib/config";
 import { ANCHOR_ENABLED, ANCHOR_HOME_DOMAIN, FIAT_CODE } from "@/lib/anchor/config";
-import { authenticate } from "@/lib/anchor/auth";
+import { tokenSource } from "@/lib/anchor/auth";
 import { priceForAsset, trimAmount, type Quote } from "@/lib/anchor/sep38";
 import {
   describeStatus,
@@ -140,8 +140,12 @@ export default function CashOutPanel() {
       const mismatch = await networkMismatch();
       if (mismatch) throw new Error(mismatch);
 
+      // Signed now, so the wallet prompt belongs to this step; what is passed
+      // on is the getter, so the poll below can re-sign if the anchor's token
+      // expires while the withdrawal is still settling.
       setBusy("Proving the wallet is yours…");
-      const token = await authenticate(anchor, address, sign);
+      const token = tokenSource(anchor, address, sign);
+      await token();
 
       setBusy("Asking the anchor where to send it…");
       const withdraw = await startWithdraw(anchor, token, typed);

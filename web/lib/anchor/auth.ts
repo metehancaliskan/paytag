@@ -29,17 +29,32 @@ const FRESH_ENOUGH_SECONDS = 60;
 export type SignXdr = (xdr: string) => Promise<string>;
 
 /**
+ * Asks for a token, and can be asked again for a fresh one.
+ *
+ * SEP-10 does not fix a JWT lifetime, so anchors range from minutes to a day
+ * and nothing on our side can know which. Passing a getter rather than a
+ * string is what lets a long wait — a bank transfer taking ten minutes to
+ * clear — outlive the token it started with.
+ */
+export type TokenGetter = (force?: boolean) => Promise<string>;
+
+/**
  * Returns a bearer token for this account at this anchor, signing a fresh
  * challenge only when the cached one is missing or nearly expired.
+ *
+ * `force` skips the cache. It is for the case the expiry claim cannot catch:
+ * an anchor that rejects a token we still believe in, because it revoked it,
+ * restarted, or reads the clock differently than we do.
  */
 export async function authenticate(
   anchor: AnchorInfo,
   account: string,
   sign: SignXdr,
+  force = false,
 ): Promise<string> {
   const key = `${anchor.domain}|${account}`;
   const cached = tokens.get(key);
-  if (cached && !isStale(cached.expiresAt)) return cached.token;
+  if (cached && !force && !isStale(cached.expiresAt)) return cached.token;
 
   const challenge = await getChallenge(anchor, account);
   const signed = await sign(challenge);
@@ -47,6 +62,21 @@ export async function authenticate(
 
   tokens.set(key, { token, expiresAt: expiryOf(token) });
   return token;
+}
+
+/**
+ * A getter bound to one anchor and one account.
+ *
+ * Hand this to anything that makes more than one call. Each call gets a token
+ * that is valid at the moment it is made, and a rejected one is replaced by a
+ * fresh signature instead of a failed flow.
+ */
+export function tokenSource(
+  anchor: AnchorInfo,
+  account: string,
+  sign: SignXdr,
+): TokenGetter {
+  return (force = false) => authenticate(anchor, account, sign, force);
 }
 
 /** Drops a cached token — for signing out, or after the anchor rejects one. */

@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { trimAmount } from "./sep38";
 import {
   describeStatus,
+  getTransaction,
   humanise,
   isFinal,
   needsUser,
@@ -139,5 +140,68 @@ describe("trimAmount", () => {
   it("never leaves a trailing dot", () => {
     expect(trimAmount("20.3960908", 0)).toBe("20");
     expect(trimAmount("20.", 2)).toBe("20");
+  });
+});
+
+/**
+ * A token that expires mid-transfer.
+ *
+ * SEP-10 fixes no JWT lifetime, so an anchor may hand out one that dies while
+ * a bank transfer is still clearing. The flows here can wait ten minutes on a
+ * single conversation, which makes "the credential went stale" an ordinary
+ * event rather than an error worth showing anyone. These tests stub fetch
+ * rather than the anchor, because the property being held down is ours: one
+ * retry, with a genuinely new signature, and never a second one.
+ */
+describe("when the anchor rejects the token", () => {
+  const anchor = {
+    transferServer: "https://anchor.test/sep6",
+  } as Parameters<typeof getTransaction>[0];
+
+  function stubFetch(statuses: number[]) {
+    const seen: string[] = [];
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      seen.push(String((init?.headers as Record<string, string>).Authorization));
+      const status = statuses.shift() ?? 200;
+      return {
+        ok: status === 200,
+        status,
+        json: async () => ({ transaction: { id: "t1", status: "completed" } }),
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    return seen;
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("signs again and succeeds, given something that can re-sign", async () => {
+    const seen = stubFetch([401, 200]);
+    const getter = vi.fn(async (force?: boolean) => (force ? "fresh" : "stale"));
+
+    const tx = await getTransaction(anchor, getter, "t1");
+
+    expect(tx.status).toBe("completed");
+    expect(seen).toEqual(["Bearer stale", "Bearer fresh"]);
+    expect(getter).toHaveBeenNthCalledWith(2, true);
+  });
+
+  it("does not retry a bare token, because there is nothing new to try", async () => {
+    const seen = stubFetch([401]);
+
+    await expect(getTransaction(anchor, "stale", "t1")).rejects.toThrow(
+      /refused to read the transaction/,
+    );
+    expect(seen).toEqual(["Bearer stale"]);
+  });
+
+  it("gives up after one retry rather than looping on a key that is simply wrong", async () => {
+    const seen = stubFetch([401, 401]);
+    const getter = vi.fn(async () => "no-good");
+
+    await expect(getTransaction(anchor, getter, "t1")).rejects.toThrow(
+      /refused to read the transaction/,
+    );
+    expect(seen).toHaveLength(2);
   });
 });
