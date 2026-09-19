@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["escrow"]
+members = ["escrow", "lab-yield"]
 
 [workspace.package]
 version = "0.1.0"
