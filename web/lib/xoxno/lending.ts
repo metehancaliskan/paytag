@@ -128,6 +128,28 @@ export async function collateralOf(
   return BigInt(raw as bigint);
 }
 
+/**
+ * The market's supply index: how much one unit lent at the start is worth now.
+ *
+ * This is where XOXNO's yield lives. There is no reward token and nothing is
+ * ever credited to a position — the index climbs, and the same position is
+ * worth more because of it. RAY scaled, twenty-seven decimal places, which is
+ * the reason it can be watched in real time at all: the interest on a small
+ * position is far below one stroop a second, but the index it comes from moves
+ * by billions of RAY in the same time.
+ */
+export async function supplyIndex(asset: string): Promise<bigint> {
+  const raw = (await read(
+    XOXNO_CONTROLLER,
+    "get_market_index",
+    hubAsset(asset),
+  )) as { supply_index?: unknown };
+  if (raw.supply_index === undefined) {
+    throw new Error("The controller gave no supply index for that market.");
+  }
+  return BigInt(raw.supply_index as bigint);
+}
+
 // ------------------------------------------------------------------- writing
 
 /**

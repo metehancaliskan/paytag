@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import ClaimPanel from "@/components/ClaimPanel";
 import EarnPanel from "@/components/EarnPanel";
-import XoxnoPanel from "@/components/XoxnoPanel";
 import { AssetMark, ChevronRight } from "@/components/icons";
 import { ANCHOR_ENABLED, FIAT_CODE } from "@/lib/anchor/config";
 import { KIND_SLUG, isKindSlug } from "@/lib/identity";
@@ -46,11 +45,6 @@ export default async function ClaimPage({
           configured pool, so a reader who has not claimed anything never sees
           it. */}
       <EarnPanel />
-
-      {/* The second venue, and the reason there are two is on the card: one
-          pays a token that cannot reach a bank account, the other pays the
-          asset itself, which can. Renders nothing without a wallet. */}
-      <XoxnoPanel />
 
       {/* The step after this one, and the whole point of the product for the
           person on this page: claiming leaves a balance on a network they did
