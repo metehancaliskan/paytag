@@ -118,3 +118,68 @@ export function CheckMark({ className, size = 12 }: IconProps) {
     </svg>
   );
 }
+
+/**
+ * The mark beside an amount: XLM, USDC, or Turkish lira.
+ *
+ * Drawn here rather than fetched, for the same reason as every other icon in
+ * this file — an inline shape follows the theme, needs no second asset for dark
+ * mode, and cannot fail to load beside a number that means money.
+ *
+ * They are typographic marks in each asset's own colour, not the projects'
+ * trademarked logos: a redrawn logo that is slightly wrong looks worse than an
+ * honest glyph, and a payment screen is the wrong place to be approximate about
+ * whose asset this is. The colours are hardcoded rather than themed because
+ * they identify the asset, not the interface — USDC is that blue in both
+ * themes, the way a bank card is the same colour in any light.
+ */
+export function AssetMark({
+  asset,
+  size = 26,
+  className = "",
+}: {
+  asset: "XLM" | "USDC" | "TRY";
+  size?: number;
+  className?: string;
+}) {
+  const skin = {
+    // Stellar's own palette is black and white, which disappears into one
+    // theme or the other; this slate keeps the mark legible in both.
+    XLM: { bg: "#38435c", fg: "#ffffff" },
+    USDC: { bg: "#2775ca", fg: "#ffffff" },
+    TRY: { bg: "#c8323f", fg: "#ffffff" },
+  }[asset];
+
+  return (
+    <span
+      aria-hidden
+      className={`grid shrink-0 place-items-center rounded-full ${className}`}
+      style={{
+        width: size,
+        height: size,
+        background: skin.bg,
+        color: skin.fg,
+      }}
+    >
+      {asset === "XLM" ? (
+        // A four-pointed star: the shape lumens are written with, and the one
+        // part of Stellar's mark that is a glyph rather than a logo.
+        <svg
+          viewBox="0 0 24 24"
+          width={size * 0.56}
+          height={size * 0.56}
+          fill="currentColor"
+        >
+          <path d="M12 1.5c.5 4.6 1.4 6.9 3.4 8.6 1.7 1.4 3.9 1.9 7.1 2.4-4.6.5-6.9 1.4-8.6 3.4-1.4 1.7-1.9 3.9-2.4 7.1-.5-4.6-1.4-6.9-3.4-8.6-1.7-1.4-3.9-1.9-7.1-2.4 4.6-.5 6.9-1.4 8.6-3.4C11 7.4 11.5 5.2 12 1.5Z" />
+        </svg>
+      ) : (
+        <span
+          className="font-bold leading-none"
+          style={{ fontSize: size * 0.52 }}
+        >
+          {asset === "USDC" ? "$" : "₺"}
+        </span>
+      )}
+    </span>
+  );
+}

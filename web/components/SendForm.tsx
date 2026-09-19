@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import CopyButton from "./CopyButton";
 import { usePrice } from "./usePrice";
@@ -14,7 +13,7 @@ import {
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { sign, networkMismatch } from "@/lib/freighter";
-import { fromHex, kindUrlPrefix, type IdentityKind } from "@/lib/identity";
+import { fromHex, kindUrlPrefix, slugOf, type IdentityKind } from "@/lib/identity";
 import {
   formatDate,
   displayUnits,
@@ -24,7 +23,10 @@ import {
   usdGlance,
 } from "@/lib/format";
 import { unitsToCents } from "@/lib/price";
-import { ANCHOR_ENABLED, FIAT_CODE } from "@/lib/anchor/config";
+import { FIAT_CODE } from "@/lib/anchor/config";
+import { priceFor, trimAmount } from "@/lib/anchor/sep38";
+import { useAnchor } from "./useAnchor";
+import { AssetMark, CheckMark } from "./icons";
 import {
   DEFAULT_TOKEN,
   EXPIRY_CHOICES,
@@ -51,6 +53,9 @@ import {
  * fall back to. The estimate disappears and the field keeps working, because
  * the field never needed the rate.
  */
+/** An asset the wallet holds, or the bank route that ends in one. */
+type Method = TokenKey | "TRY";
+
 export default function SendForm({
   handle,
   kind,
@@ -69,15 +74,76 @@ export default function SendForm({
   const { address, connect, connecting, installed, mismatch } = useWallet();
   const priceState = usePrice();
 
-  const [tokenKey, setTokenKey] = useState<TokenKey>(DEFAULT_TOKEN.key);
-  const token = tokenByKey(tokenKey);
+  const router = useRouter();
+  const initialParams = useSearchParams();
+  const { anchor } = useAnchor();
+
+  /**
+   * How the money gets there, which is one question and not two.
+   *
+   * An asset picker and a separate "no balance? add some" line underneath were
+   * two different kinds of answer to the same question, and the second one only
+   * appeared once the reader had already failed. Lira is a way of paying this
+   * handle, exactly like the other two, so it is offered in the same list at
+   * the same moment — the difference is that it takes a detour through a bank
+   * before the escrow, and the row says so.
+   */
+  const [method, setMethod] = useState<Method>(() => {
+    // `?asset=USDC` — how the top-up screen hands the reader back after a bank
+    // transfer. Read once, as the initial value: after that the choice belongs
+    // to the person making it.
+    const asked = (initialParams.get("asset") ?? "").trim().toUpperCase();
+    const known = SENDABLE_TOKENS.find((t) => t.key === asked);
+    return known ? known.key : DEFAULT_TOKEN.key;
+  });
+  const fiat = method === "TRY";
+  // The lira route ends in the anchor's asset, so that is the token it means.
+  const token = fiat ? (anchor?.token ?? DEFAULT_TOKEN) : tokenByKey(method);
+
+  /**
+   * The rows of the picker, in the order they are offered.
+   *
+   * Built from what this deployment can actually do: the wallet assets it
+   * offers, plus the bank route only once the anchor has answered. A row that
+   * cannot work is not shown greyed out — it is not shown.
+   */
+  const methods: {
+    key: Method;
+    mark: "XLM" | "USDC" | "TRY";
+    title: string;
+    subtitle: string;
+    isNew?: boolean;
+  }[] = [
+    ...SENDABLE_TOKENS.map((t) => ({
+      key: t.key as Method,
+      mark: (t.key === "XLM" ? "XLM" : "USDC") as "XLM" | "USDC",
+      title: t.symbol,
+      subtitle: t.needsTrustline
+        ? "From your wallet. Dollar-pegged, and it cashes out to a bank."
+        : "From your wallet. Nothing to set up on either side.",
+    })),
+    ...(anchor
+      ? [
+          {
+            key: "TRY" as Method,
+            mark: "TRY" as const,
+            title: `${FIAT_CODE} bank transfer`,
+            // Not "no crypto at all", which this row said until somebody read
+            // it next to a button asking them to install a wallet. The lira
+            // route still ends in one — what it removes is having to own the
+            // asset beforehand, and that is what the sentence now claims.
+            subtitle: `From your bank. It arrives as ${anchor.token.symbol}, then goes to @${handle}.`,
+            isNew: true,
+          },
+        ]
+      : []),
+  ];
 
   // A directory card can link here with ?amount=10 — the quick-tip buttons do.
   // Read once, as the initial value: after that the field belongs to the person
   // typing in it, and a re-render must not overwrite what they wrote.
-  const params = useSearchParams();
   const [amountInput, setAmountInput] = useState(() => {
-    const raw = (params.get("amount") ?? "").trim();
+    const raw = (initialParams.get("amount") ?? "").trim();
     return /^\d{1,9}(\.\d{1,7})?$/.test(raw) ? raw : "";
   });
   const [choice, setChoice] = useState(0);
@@ -90,6 +156,10 @@ export default function SendForm({
   } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fiatQuote, setFiatQuote] = useState<{
+    sell: string;
+    buy: string;
+  } | null>(null);
   const [sent, setSent] = useState<{
     hash: string;
     units: bigint;
@@ -135,7 +205,7 @@ export default function SendForm({
   let units: bigint | null = null;
   let problem: string | null = null;
 
-  if (amountInput.trim() !== "") {
+  if (!fiat && amountInput.trim() !== "") {
     try {
       units = toUnits(amountInput, token.decimals);
       if (units <= 0n) {
@@ -151,12 +221,45 @@ export default function SendForm({
     }
   }
 
-  const ready = units !== null && problem === null;
+  // The lira amount is not chain units and never becomes any: it is what the
+  // bank moves, and the anchor decides what that buys. So it is validated on
+  // its own terms — two decimal places, like a bank statement.
+  const fiatAmount = amountInput.trim().replace(",", ".");
+  const fiatOk = /^\d+(\.\d{1,2})?$/.test(fiatAmount) && Number(fiatAmount) > 0;
+
+  const ready = fiat ? fiatOk : units !== null && problem === null;
 
   /** What the typed amount is worth today. Decoration, and it says so below. */
   const worth =
     rate !== null && units !== null && problem === null
       ? usdGlance(unitsToCents(units, rate, token.decimals))
+      : null;
+
+  // What the lira would buy, as an estimate and labelled as one. Debounced,
+  // and never blocking: a quote that fails costs a preview and nothing else.
+  useEffect(() => {
+    if (!fiat || !anchor?.quoteServer || !fiatOk) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const q = await priceFor(anchor, fiatAmount);
+          if (alive) setFiatQuote({ sell: q.sellAmount, buy: q.buyAmount });
+        } catch {
+          // Leave the last estimate alone; `shownFiatQuote` hides a stale one.
+        }
+      })();
+    }, 350);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [fiat, anchor, fiatAmount, fiatOk]);
+
+  /** Only shown when it is a quote for what is in the field right now. */
+  const shownFiatQuote =
+    fiatQuote && fiatOk && Number(fiatQuote.sell) === Number(fiatAmount)
+      ? fiatQuote
       : null;
 
   const expiry = EXPIRY_CHOICES[choice];
@@ -280,7 +383,7 @@ export default function SendForm({
     <div className="card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-semibold">Put money aside</h2>
-        {address && balance !== null && (
+        {!fiat && address && balance !== null && (
           <span
             className="num text-xs text-mute"
             title={`${fromUnits(balance, token.decimals)} ${token.symbol}`}
@@ -290,32 +393,59 @@ export default function SendForm({
         )}
       </div>
 
-      {SENDABLE_TOKENS.length > 1 && (
+      {/* Three ways to pay the same handle, in one list and with one shape
+          each: a mark, what it is, and what it costs you to use it. The lira
+          row is the only one that leaves this page, and its subtitle is where
+          that is said — not in a footnote after the reader has committed. */}
+      {methods.length > 1 && (
         <div className="mt-4">
-          <span className="label">Asset</span>
-          <div className="segmented" role="group" aria-label="Asset">
-            {SENDABLE_TOKENS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                aria-pressed={tokenKey === t.key}
-                onClick={() => {
-                  setTokenKey(t.key);
-                  setAmountInput("");
-                }}
-                disabled={busy !== null}
-              >
-                {t.symbol}
-              </button>
+          <span className="label">How to pay</span>
+          <ul
+            className="mt-1.5 divide-y divide-line overflow-hidden rounded-xl border border-line"
+            role="radiogroup"
+            aria-label="How to pay"
+          >
+            {methods.map((m) => (
+              <li key={m.key}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={method === m.key}
+                  onClick={() => {
+                    setMethod(m.key);
+                    setAmountInput("");
+                  }}
+                  disabled={busy !== null}
+                  className={`flex w-full items-center gap-3 p-3 text-left transition-colors ${
+                    method === m.key ? "bg-raised" : "hover:bg-raised"
+                  }`}
+                >
+                  <AssetMark asset={m.mark} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold">{m.title}</span>
+                      {m.isNew && <span className="badge badge-claimed">new</span>}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-mute">
+                      {m.subtitle}
+                    </span>
+                  </span>
+                  {method === m.key && (
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent text-accent-fg">
+                      <CheckMark size={10} />
+                    </span>
+                  )}
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
           <label className="label" htmlFor={amountId}>
-            Amount in {token.symbol}
+            Amount in {fiat ? FIAT_CODE : token.symbol}
           </label>
           <div
             className="input-group"
@@ -333,8 +463,10 @@ export default function SendForm({
               aria-invalid={problem ? "true" : undefined}
               aria-describedby={problem ? problemId : undefined}
             />
-            <span className="input-suffix">{token.symbol}</span>
-            {balance !== null && balance > 0n && (
+            <span className="input-suffix">
+              {fiat ? FIAT_CODE : token.symbol}
+            </span>
+            {!fiat && balance !== null && balance > 0n && (
               <button
                 type="button"
                 className="btn btn-quiet"
@@ -347,7 +479,10 @@ export default function SendForm({
           </div>
         </div>
 
-        <div>
+        {/* Not shown on the lira route: the escrow does not exist yet, and the
+            window is chosen in the step that creates it. Asking here would be
+            asking about something two screens away. */}
+        <div className={fiat ? "hidden" : undefined}>
           <span className="label">Claim window</span>
           <div className="segmented" role="group" aria-label="Claim window">
             {EXPIRY_CHOICES.map((c, i) => (
@@ -380,10 +515,31 @@ export default function SendForm({
           sentence there, because losing the rate changed what the field meant;
           now it changes nothing, and a line explaining that a decoration is
           missing is worse than the missing decoration. */}
-      {!token.isDollarPegged && worth !== null && (
+      {!fiat && !token.isDollarPegged && worth !== null && (
         <p className="mt-2 text-xs text-mute">
           Worth about{" "}
           <span className="num font-semibold text-dim">{worth}</span> today
+        </p>
+      )}
+
+      {/* The lira route's own estimate, in the same place and the same voice as
+          the dollar figure above it. The anchor settles the real number when
+          the transfer lands, which is why this says "about". */}
+      {fiat && (
+        <p className="mt-2 text-xs text-mute">
+          {shownFiatQuote ? (
+            <>
+              About{" "}
+              <span className="num font-semibold text-dim">
+                {trimAmount(shownFiatQuote.buy)} {token.symbol}
+              </span>{" "}
+              for @{handle}, after the anchor&rsquo;s fee
+            </>
+          ) : (
+            <>
+              Your bank sends {FIAT_CODE}; @{handle} is paid in {token.symbol}.
+            </>
+          )}
         </p>
       )}
 
@@ -412,6 +568,21 @@ export default function SendForm({
             {connecting && <span className="spinner" aria-hidden />}
             {connecting ? "Connecting…" : "Connect a wallet to send"}
           </button>
+        ) : fiat ? (
+          // The lira route hands off rather than signing: the bank has to move
+          // first. The handle and the amount travel in the link, so the top-up
+          // screen knows who this is for and comes back to finish it.
+          <button
+            className="btn btn-primary"
+            onClick={() =>
+              router.push(
+                `/topup?to=${slugOf(kind)}/${handle}&amount=${encodeURIComponent(fiatAmount)}`,
+              )
+            }
+            disabled={!ready}
+          >
+            Pay with {FIAT_CODE}
+          </button>
         ) : (
           <button
             className="btn btn-primary"
@@ -428,20 +599,7 @@ export default function SendForm({
         </span>
       </div>
 
-      {/* The way out of an empty balance, offered where the emptiness is felt.
-          Not a fourth item in the navigation: adding money is something you
-          need at a moment, not a place you go. */}
-      {ANCHOR_ENABLED && token.needsTrustline && address && (balance ?? 0n) === 0n && (
-        <p className="mt-3 text-xs text-mute">
-          No {token.symbol} in this wallet.{" "}
-          <Link className="link" href="/topup">
-            Add some with a {FIAT_CODE} bank transfer
-          </Link>
-          .
-        </p>
-      )}
-
-      {token.needsTrustline && (
+      {!fiat && token.needsTrustline && (
         <p className="mt-3 text-xs text-mute">
           {address && balance === null
             ? // Said BEFORE the signature, not after. A wallet with no trustline

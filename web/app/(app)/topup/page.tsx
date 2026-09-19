@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import TopUpPanel from "@/components/TopUpPanel";
@@ -29,7 +30,13 @@ export default function TopUpPage() {
         </p>
       </header>
 
-      <TopUpPanel />
+      {/* The panel reads `?to=` and `?amount=` from the query, and a client
+          component that does so cannot be prerendered without a boundary to
+          wait behind — the build says so rather than shipping a page that
+          renders one thing on the server and another in the browser. */}
+      <Suspense fallback={<div className="skeleton h-48 w-full" />}>
+        <TopUpPanel />
+      </Suspense>
 
       <p className="px-1 text-xs text-mute">
         Already have a balance?{" "}

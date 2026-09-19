@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import CopyButton from "./CopyButton";
 import { sign as signWithWallet, networkMismatch } from "@/lib/freighter";
 import { shortAddr } from "@/lib/format";
+import {
+  isKindSlug,
+  kindUrlPrefix,
+  KIND_SLUG,
+  normalizeHandle,
+  type IdentityKind,
+  type KindSlug,
+} from "@/lib/identity";
 import { explorerTx } from "@/lib/config";
 import {
   ANCHOR_ENABLED,
@@ -48,12 +57,31 @@ type Stage = "amount" | "transfer" | "done";
 
 export default function TopUpPanel() {
   const { address, connect, connecting, installed } = useWallet();
+  const params = useSearchParams();
+
+  /**
+   * Who this money is for, when the reader arrived from a send form.
+   *
+   * `?to=gh/torvalds` — the handle the send form was pointed at, carried
+   * through so that adding money does not lose the reason for adding it. The
+   * page works without it: opened on its own, it is simply a top-up.
+   *
+   * Parsed rather than trusted. The value reaches a link at the end of the
+   * flow, and a malformed handle there would send somebody to a page for an
+   * identity that does not exist — or, worse, a different one.
+   */
+  const payee = useMemo(() => parsePayee(params.get("to")), [params]);
 
   const [anchor, setAnchor] = useState<AnchorInfo | null>(null);
   const [limits, setLimits] = useState<Sep6Limits | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
 
-  const [amount, setAmount] = useState("");
+  // Prefilled from the send form when it sent the reader here, so the amount
+  // is not typed twice.
+  const [amount, setAmount] = useState(() => {
+    const raw = (params.get("amount") ?? "").trim().replace(",", ".");
+    return /^\d{1,9}(\.\d{1,2})?$/.test(raw) ? raw : "";
+  });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
 
@@ -312,8 +340,22 @@ export default function TopUpPanel() {
         {stage === "amount" && (
           <>
             <p className="mt-1 text-sm text-dim">
-              Send Turkish lira from your bank and get {symbol} in your wallet.
-              The {symbol} is what you can then pay a handle with.
+              {payee ? (
+                <>
+                  Send Turkish lira from your bank. It arrives as {symbol} in
+                  your wallet, and the last step puts it aside for{" "}
+                  <span className="mono">
+                    {kindUrlPrefix(payee.kind)}
+                    {payee.handle}
+                  </span>
+                  .
+                </>
+              ) : (
+                <>
+                  Send Turkish lira from your bank and get {symbol} in your
+                  wallet. The {symbol} is what you can then pay a handle with.
+                </>
+              )}
             </p>
 
             <div className="mt-4">
@@ -412,8 +454,10 @@ export default function TopUpPanel() {
             <span className="num font-semibold text-accent-text">
               {trimAmount(tx.amountOut ?? "")} {symbol}
             </span>{" "}
-            is in <span className="mono">{shortAddr(address ?? "")}</span>. You
-            can pay a handle with it now.
+            is in <span className="mono">{shortAddr(address ?? "")}</span>.
+            {payee
+              ? ` One signature left to put it aside for ${kindUrlPrefix(payee.kind)}${payee.handle}.`
+              : " You can pay a handle with it now."}
           </p>
         )}
 
@@ -517,6 +561,20 @@ export default function TopUpPanel() {
                 Check again
               </button>
             </>
+          ) : payee && tx?.amountOut ? (
+            // Back to the form that sent us here, with the amount that actually
+            // arrived — not the one that was asked for. The anchor's fee comes
+            // off in between, and a prefilled figure the wallet cannot cover is
+            // a failed transaction waiting to happen.
+            <Link
+              className="btn btn-primary"
+              href={`/p/${payee.slug}/${payee.handle}?amount=${encodeURIComponent(
+                trimAmount(tx.amountOut, 7),
+              )}&asset=${anchor.token.key}`}
+            >
+              Send it to {kindUrlPrefix(payee.kind)}
+              {payee.handle}
+            </Link>
           ) : (
             <Link className="btn btn-primary" href="/send">
               Pay a handle
@@ -550,6 +608,30 @@ export default function TopUpPanel() {
       )}
     </div>
   );
+}
+
+/**
+ * `gh/torvalds` — the slug and handle a send form carried over.
+ *
+ * Both halves are validated: the slug against the kinds that exist, the handle
+ * through the same normalisation the rest of the product uses. Anything else
+ * answers null and the page falls back to being an ordinary top-up, which is
+ * the right failure — a mangled handle in a link is how money goes to the
+ * wrong tag.
+ */
+function parsePayee(
+  raw: string | null,
+): { slug: KindSlug; handle: string; kind: IdentityKind } | null {
+  if (!raw) return null;
+  const [slug, ...rest] = raw.split("/");
+  const handle = rest.join("/");
+  if (!isKindSlug(slug) || !handle) return null;
+  try {
+    const kind = KIND_SLUG[slug];
+    return { slug, handle: normalizeHandle(handle, kind), kind };
+  } catch {
+    return null;
+  }
 }
 
 function message(e: unknown): string {
