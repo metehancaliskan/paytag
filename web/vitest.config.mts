@@ -36,6 +36,10 @@ export default defineConfig({
       // behaviour, not ours — but the asset check that guards the ramp is
       // arithmetic over these values, and it is tested.
       NEXT_PUBLIC_ANCHOR_HOME_DOMAIN: "tr-mock-anchor.fly.dev",
+      // The Blend pool. No test reaches it either; the arithmetic that is ours
+      // to get wrong is tested, the calls are not.
+      NEXT_PUBLIC_BLEND_POOL_ID:
+        "CAPBMXIQTICKWFPWFDJWMAKBXBPJZUKLNONQH3MLPLLBKQ643CYN5PRW",
       // The real testnet native SAC, the same value CI builds with. No test
       // reads the chain, so any non-empty value would do, but a wrong one here
       // would be a wrong answer waiting for the first test that does.

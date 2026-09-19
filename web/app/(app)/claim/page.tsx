@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ClaimPanel from "@/components/ClaimPanel";
+import EarnPanel from "@/components/EarnPanel";
 import { AssetMark, ChevronRight } from "@/components/icons";
 import { ANCHOR_ENABLED, FIAT_CODE } from "@/lib/anchor/config";
 import { KIND_SLUG, isKindSlug } from "@/lib/identity";
@@ -38,6 +39,12 @@ export default async function ClaimPage({
         hintKind={hintKind}
         authError={authError}
       />
+
+      {/* The third answer to "now what", under the two that already exist on
+          this page. It renders nothing at all without a connected wallet or a
+          configured pool, so a reader who has not claimed anything never sees
+          it. */}
+      <EarnPanel />
 
       {/* The step after this one, and the whole point of the product for the
           person on this page: claiming leaves a balance on a network they did
