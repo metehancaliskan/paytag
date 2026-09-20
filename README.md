@@ -358,6 +358,10 @@ the verifier refuses to sign for them.
 
 **Next:** [docs/ROADMAP.md](docs/ROADMAP.md) — the path to SCF and InstAward.
 
+**Judging this?** [docs/SUBMISSION.md](docs/SUBMISSION.md) has the whole
+inventory: links, contract ids, how each hackathon requirement is met, the
+evaluation path, and one known issue with the shared sandbox anchor.
+
 ---
 
 ## Secrets
@@ -386,6 +390,7 @@ db/
   schema.sql          Supabase schema, always current. Tables, RLS policies, views.
   schema_test.sql     Behavioural test: ten rejection cases, two retention cases.
 docs/
+  SUBMISSION.md       Hackathon submission inventory and evaluation path.
   ROADMAP.md          Post-hackathon plan: SCF and InstAward.
   LAB-YIELD-ESCROW.md The lending-escrow experiment and why it was not shipped.
   SPEC.md             Protocol and data model. Identity keys, signatures, red team.
