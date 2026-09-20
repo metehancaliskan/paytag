@@ -40,8 +40,8 @@ export default function Landing() {
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center gap-4 px-5 py-4">
           <span className="flex items-center gap-2.5">
-            <Logo size={30} />
-            <span className="text-lg font-bold tracking-tight">Paytag</span>
+            <Logo size={38} />
+            <span className="text-2xl font-bold tracking-tight">Paytag</span>
           </span>
           {/* The only button on the page, and it stays on screen. That is what
               replaced the closing call to action. */}

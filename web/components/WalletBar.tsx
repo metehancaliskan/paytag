@@ -3,33 +3,32 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "./WalletProvider";
-import { useIdentity, identityList, PROVIDER_KIND } from "./useIdentity";
-import { PROVIDERS } from "./providers";
+import { useIdentity, identityList } from "./useIdentity";
 import CopyButton from "./CopyButton";
 import { CheckMark, ChevronDown, ChevronRight } from "./icons";
 import { tokenBalance } from "@/lib/contract";
 import { fromUnits, shortAddr, usdGlance, wholeUnits } from "@/lib/format";
 import { unitsToCents } from "@/lib/price";
 import { usePrice } from "./usePrice";
-import { DEFAULT_TOKEN, X_ENABLED, explorerAccount } from "@/lib/config";
+import { DEFAULT_TOKEN, explorerAccount } from "@/lib/config";
 
 /**
- * The account menu.
+ * The wallet menu. ONLY the wallet.
  *
- * It carries two unrelated things — a wallet (where money goes) and the
- * identities (who is allowed to take it) — so they stay two sections with a
- * rule between them. Mixing them was the old layout's problem: "Disconnect"
- * and "Sign out" sat side by side meaning entirely different things.
+ * It used to carry the verified identities too, which put two unrelated things
+ * in one list: a wallet is where money goes, an identity is who is allowed to
+ * take it, and "Disconnect" sitting beside "Sign out" meant two entirely
+ * different things one row apart. The identities are now chips in the header,
+ * where they can be seen without opening anything — see IdentityChips.
  *
- * Both providers are listed whether or not they are connected, and the row for
- * an unconnected one starts OAuth from here. Everything else about the account
- * — the payout address, the cards, deleting it — is one link away under
- * Settings, because a dropdown is a place for two actions, not for settings.
+ * What is left is the wallet and the two places that hang off it: what this
+ * wallet has sent, and Settings for everything else about the account. A
+ * dropdown is a place for a couple of actions, not for settings.
  */
 export default function WalletBar() {
   const { address, installed, connecting, error, mismatch, connect, disconnect } =
     useWallet();
-  const { identity, signIn } = useIdentity();
+  const { identity } = useIdentity();
   // Both verified handles, GitHub first. A person can hold one of each.
   const mine = identityList(identity);
 
@@ -110,10 +109,9 @@ export default function WalletBar() {
     );
   }
 
-  // No wallet yet, so there is no menu to hang the identity off. It does not get
-  // its own header button: the Settings icon beside this one already goes to the
-  // page that connects GitHub and X, and two icons that lead to /profile is one
-  // icon too many.
+  // No wallet yet, so there is no menu to hang anything off. Connecting the
+  // wallet is the only thing on offer here; proving a handle is the chips'
+  // job, and they sit beside this button whether or not a wallet is connected.
   if (!address) {
     return (
       <div className="flex flex-col items-end gap-1">
@@ -151,8 +149,13 @@ export default function WalletBar() {
         {shown && (
           <span className="num text-sm font-semibold text-accent-text">
             {wholeUnits(shown.units, DEFAULT_TOKEN.decimals)} {symbol}
+            {/* The dollar estimate is the first thing to go when the row is
+                tight: it is an estimate, and on a phone it is what pushes the
+                chip past the width the mark needs. */}
             {usd && (
-              <span className="ml-1.5 font-medium text-mute">({usd})</span>
+              <span className="ml-1.5 hidden font-medium text-mute sm:inline">
+                ({usd})
+              </span>
             )}
           </span>
         )}
@@ -175,83 +178,17 @@ export default function WalletBar() {
 
       {open && (
         <div role="menu" className="menu absolute right-0 z-20 mt-2 w-80">
-          {/* ------------------------------------------------ identity
-              Both providers, always, connected or not. Listing only what is
-              already verified hid the other half of the product: money can be
-              waiting for an X handle, and a menu that never mentions X is a
-              menu that never says so. */}
-          {identity.status === "loading" ? (
-            <div className="menu-row">
-              <div className="skeleton h-4 w-36" />
-            </div>
-          ) : identity.status === "off" ? (
-            <p className="menu-row text-xs text-mute">
-              Identity verification is not configured here.
-            </p>
-          ) : (
-            PROVIDERS.map((p) => {
-              const v = mine.find((m) => m.kind === PROVIDER_KIND[p.key]);
-              const usable = p.key !== "x" || X_ENABLED;
-
-              return v ? (
-                <Link
-                  key={p.key}
-                  href="/profile"
-                  className="menu-item"
-                  onClick={() => setOpen(false)}
-                >
-                  {p.icon}
-                  <span className="truncate font-semibold">@{v.handle}</span>
-                  <CheckMark
-                    size={12}
-                    className="ml-auto shrink-0 text-accent-text"
-                  />
-                </Link>
-              ) : (
-                <button
-                  key={p.key}
-                  type="button"
-                  className="menu-item"
-                  disabled={!usable}
-                  title={usable ? undefined : "X sign-in is not enabled here"}
-                  onClick={() => {
-                    setOpen(false);
-                    void signIn(p.key, "/profile");
-                  }}
-                >
-                  {p.icon}
-                  <span className="text-mute">Connect {p.label}</span>
-                  <ChevronRight className="ml-auto shrink-0 text-mute" />
-                </button>
-              );
-            })
-          )}
-
-          {identity.status !== "off" && (
-            <>
-              <div className="menu-sep" />
-              {identity.status === "verified" && (
-                <Link
-                  href="/claim"
-                  className="menu-item"
-                  onClick={() => setOpen(false)}
-                >
-                  Claim your money
-                  <ChevronRight className="ml-auto shrink-0 text-mute" />
-                </Link>
-              )}
-              {/* Everything else about the account is one page, and this is the
-                  way to it — the menu holds the two actions, not the settings. */}
-              <Link
-                href="/profile"
-                className="menu-item"
-                onClick={() => setOpen(false)}
-              >
-                Settings
-                <ChevronRight className="ml-auto shrink-0 text-mute" />
-              </Link>
-            </>
-          )}
+          {/* Settings first, because it is where everything this menu no
+              longer holds now lives: the payout address, the cards, the
+              identities' own page. */}
+          <Link
+            href="/profile"
+            className="menu-item"
+            onClick={() => setOpen(false)}
+          >
+            Settings
+            <ChevronRight className="ml-auto shrink-0 text-mute" />
+          </Link>
 
           <div className="menu-sep" />
 
