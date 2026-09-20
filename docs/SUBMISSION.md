@@ -35,6 +35,7 @@ contract written, deployed and measured during the event.
 | Post-hackathon roadmap | [docs/ROADMAP.md](ROADMAP.md) |
 | Pitch deck | **[CONFIRM]** — share the deck from its Share menu, then paste the link |
 | Transaction evidence | [docs/evidence/tx-hashes.md](evidence/tx-hashes.md) |
+| Screenshots (real testnet data) | [docs/evidence/screenshots](evidence/screenshots) |
 
 > The pitch deck is private until it is shared. Open it, use **Share**, then put
 > the link here and in the portal — judges cannot open it otherwise.
