@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import CopyButton from "./CopyButton";
-import { sign as signWithWallet, networkMismatch } from "@/lib/freighter";
+import { sign as signWithWallet, networkMismatch } from "@/lib/wallet";
 import { shortAddr } from "@/lib/format";
 import {
   isKindSlug,

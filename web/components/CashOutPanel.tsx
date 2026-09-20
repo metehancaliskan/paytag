@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useWallet } from "./WalletProvider";
 import { useAnchor } from "./useAnchor";
 import { AssetMark } from "./icons";
-import { sign as signWithWallet, networkMismatch } from "@/lib/freighter";
+import { sign as signWithWallet, networkMismatch } from "@/lib/wallet";
 import { explorerTx } from "@/lib/config";
 import { ANCHOR_ENABLED, ANCHOR_HOME_DOMAIN, FIAT_CODE } from "@/lib/anchor/config";
 import { tokenSource } from "@/lib/anchor/auth";

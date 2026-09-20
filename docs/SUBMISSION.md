@@ -99,8 +99,10 @@ detail neither party has to understand.
 ## 5. How we meet the three shared requirements
 
 **1 · Integration with an eligible Stellar protocol.**
-Blend v2 (on the eligible list) for recipient-side lending, plus XOXNO lending
-from the wider SCF integration list. Both are read and written live on testnet.
+Blend v2 and Stellar Wallets Kit, both on the handbook's eligible list, plus
+XOXNO lending from the wider SCF integration list. Blend and XOXNO are read and
+written live on testnet; the kit is what lets a recipient sign on a phone at
+all, through Albedo, with no extension to install.
 
 **2 · Anchor / local payments.**
 A full TRY ↔ USDC rail in both directions, implemented directly against SEP-1,

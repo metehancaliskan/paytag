@@ -96,6 +96,11 @@ export default function WalletBar() {
         )
       : null;
 
+  // Nothing can sign here at all — which now means the wallet picker itself
+  // failed to load, not that an extension is missing. It used to say "install
+  // Freighter", which on a phone was advice that could not be followed: iOS
+  // browsers have no extension to install, and the reader was left at a dead
+  // end with money waiting for them.
   if (installed === false) {
     return (
       <a
@@ -103,8 +108,9 @@ export default function WalletBar() {
         href="https://www.freighter.app/"
         target="_blank"
         rel="noreferrer"
+        title="No wallet could be reached in this browser."
       >
-        Install Freighter
+        Get a wallet
       </a>
     );
   }
@@ -254,7 +260,7 @@ export default function WalletBar() {
                 disconnect();
                 setOpen(false);
               }}
-              title="Forgets the address in this browser. Freighter keeps its own permission."
+              title="Forgets the address and the wallet you picked, in this browser only."
             >
               Disconnect
             </button>

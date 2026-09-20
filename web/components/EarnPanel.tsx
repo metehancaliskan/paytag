@@ -7,7 +7,7 @@ import { useLiveRewards } from "./useLiveRewards";
 import { useLiveLent } from "./useLiveLent";
 import LiveAmount from "./LiveAmount";
 import { AssetMark } from "./icons";
-import { sign, networkMismatch } from "@/lib/freighter";
+import { sign, networkMismatch } from "@/lib/wallet";
 import { submitSigned, tokenBalance } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { displayUnits, fromUnits, toUnits } from "@/lib/format";

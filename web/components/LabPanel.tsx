@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { useWallet } from "./WalletProvider";
 import LiveAmount from "./LiveAmount";
 import { AssetMark } from "./icons";
-import { sign, networkMismatch } from "@/lib/freighter";
+import { sign, networkMismatch } from "@/lib/wallet";
 import { latestLedger, submitSigned, tokenBalance } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
 import { displayUnits, fromUnits, toUnits } from "@/lib/format";

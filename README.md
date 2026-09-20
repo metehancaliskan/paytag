@@ -189,7 +189,19 @@ protocol is paying.
 lending the escrow while it waits — was built, deployed, measured, and rejected;
 [the report](docs/LAB-YIELD-ESCROW.md) has the numbers.
 
-### 3. Soroban itself
+### 3. Stellar Wallets Kit — a wallet on the device you are holding
+
+Signing used to be Freighter and only Freighter, which is a browser extension:
+on a phone the app asked people to install something that cannot be installed,
+and left them at a dead end with money waiting for them. The kit replaces that
+with a picker over several wallets, and the one that matters on a phone is
+**Albedo** — it signs on the web, in a tab, with no extension and no app.
+
+`web/lib/wallet.ts` wraps it, and every call falls back to the direct Freighter
+bridge if the kit cannot load. It is in the path of signing money away, so it
+does not get to be a single point of failure.
+
+### 4. Soroban itself
 
 Identity-keyed storage, `ed25519_verify` in the contract, TTL bumps on both
 instance and payment entries, `contractevent` for every state change, and — in

@@ -12,7 +12,7 @@ import {
   tokenBalance,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import { sign, networkMismatch } from "@/lib/freighter";
+import { sign, networkMismatch } from "@/lib/wallet";
 import { fromHex, kindUrlPrefix, slugOf, type IdentityKind } from "@/lib/identity";
 import {
   formatDate,

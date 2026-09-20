@@ -20,7 +20,7 @@ import {
   STATUS,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import { sign, networkMismatch } from "@/lib/freighter";
+import { sign, networkMismatch } from "@/lib/wallet";
 import { fromHex, kindUrlPrefix, type IdentityKind } from "@/lib/identity";
 import { claimDestination } from "@/lib/payout";
 import {

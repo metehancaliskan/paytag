@@ -11,7 +11,7 @@ import {
   type Payment,
 } from "@/lib/contract";
 import { describeEscrowError } from "@/lib/stellar";
-import { sign, networkMismatch } from "@/lib/freighter";
+import { sign, networkMismatch } from "@/lib/wallet";
 import { displayUnits, fromUnits, ledgersToHuman, shortAddr } from "@/lib/format";
 import { explorerAccount, explorerTx, tokenByContractId } from "@/lib/config";
 import { kindUrlPrefix, slugOf } from "@/lib/identity";

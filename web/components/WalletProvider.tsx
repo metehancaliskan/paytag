@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as freighter from "@/lib/freighter";
+import * as wallet from "@/lib/wallet";
 
 type WalletState = {
   address: string | null;
@@ -33,19 +33,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const ok = await freighter.isInstalled();
+      const ok = await wallet.canConnect();
       if (!alive) return;
       setInstalled(ok);
       if (!ok) return;
       // If access was granted before, connect silently — nobody should have to
       // click again in every new tab.
-      const addr = await freighter.silentAddress();
+      const addr = await wallet.silentAddress();
       if (!alive) return;
       if (addr) {
         setAddress(addr);
         // Surface a wrong-network wallet immediately rather than at the moment
         // of signing, when the user has already typed an amount.
-        setMismatch(await freighter.networkMismatch());
+        setMismatch(await wallet.networkMismatch());
       }
     })();
     return () => {
@@ -57,10 +57,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null);
     setConnecting(true);
     try {
-      const problem = await freighter.networkMismatch();
+      const problem = await wallet.networkMismatch();
       setMismatch(problem);
       if (problem) throw new Error(problem);
-      setAddress(await freighter.connect());
+      setAddress(await wallet.connect());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -69,14 +69,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Forgets the address in this tab only. It cannot revoke the extension's
-   * permission — that lives in Freighter — so the UI says "disconnect here"
-   * rather than pretending to more authority than it has.
+   * Forgets the address AND which wallet was chosen, so the next connect opens
+   * the picker again. It cannot revoke the wallet's own permission — that lives
+   * in the wallet — so the UI says "disconnect here" rather than pretending to
+   * more authority than it has.
    */
   const disconnect = useCallback(() => {
     setAddress(null);
     setError(null);
     setMismatch(null);
+    void wallet.forget();
   }, []);
 
   return (
