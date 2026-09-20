@@ -69,6 +69,10 @@ Paytag's users do not start on a payments site. They start in a pull request.
 - **A GitHub App** that comments a Paytag link on merged PRs from unpaid
   contributors and on issues with a bounty label — the payment offered where the
   work happened.
+- **A Chrome extension** that puts a pay button beside every GitHub and X
+  profile. Nobody decides to pay a maintainer while looking at our website; they
+  decide it on the profile, and today that means copying a handle into another
+  tab. This removes the tab.
 - **Repository identities.** The `owner/repo` kind byte already exists in the
   protocol with no verification path. Verifying repo ownership through the same
   OAuth the app already does turns "pay a person" into "fund a project."
@@ -89,6 +93,9 @@ Written down so they are choices rather than omissions.
   being a number anyone can check. [The report](LAB-YIELD-ESCROW.md).
 - **Custody.** Paytag never holds keys. Every alternative that shortens the
   off-ramp by one step turns it into a money transmitter.
+- **Our own wallet.** [Sembol](https://sembol.xyz) already does passkey smart
+  accounts with sponsored fees on Stellar, audited and MIT-licensed. Integrating
+  it is stage 3 work; rebuilding it would be a second product.
 - **A token.** There is no problem here that a token solves.
 
 ---

@@ -409,7 +409,9 @@ scripts/
 
 ## Out of scope
 
-Chrome extension, KYC and legal workflows, revenue splits.
+KYC and legal workflows, revenue splits. A Chrome extension that puts a pay
+button beside a GitHub or X profile is on the roadmap rather than out of scope —
+that is where the decision to pay somebody actually happens.
 
 ## License
 
